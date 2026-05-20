@@ -1,12 +1,13 @@
 import re
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.modelos import LogUploadModel
+from app.models.modelos import LogModel, MetricaVeiculoModel, ModeloModel, VeiculoModel, VersaoModel
 
 _FILENAME_REGEX = re.compile(r"[^A-Za-z0-9._-]")
 
@@ -50,7 +51,61 @@ class UploadService:
         return extensao
 
     @staticmethod
-    async def processar_upload_excel(db: Session, user_email: str, arquivo: UploadFile) -> dict:
+    def _obter_metrica_para_log(db: Session, user_id: int) -> int:
+        metrica = (
+            db.query(MetricaVeiculoModel)
+            .filter(MetricaVeiculoModel.user_id == user_id)
+            .order_by(MetricaVeiculoModel.hour_date.desc(), MetricaVeiculoModel.id.desc())
+            .first()
+        )
+        if metrica:
+            return metrica.id
+
+        modelo = db.query(ModeloModel).filter(ModeloModel.marca == "Sistema", ModeloModel.nome == "Upload").first()
+        if not modelo:
+            modelo = ModeloModel(marca="Sistema", nome="Upload")
+            db.add(modelo)
+            db.flush()
+
+        versao = db.query(VersaoModel).filter(VersaoModel.modelo_id == modelo.id, VersaoModel.nome == "1.0").first()
+        if not versao:
+            versao = VersaoModel(modelo_id=modelo.id, nome="1.0")
+            db.add(versao)
+            db.flush()
+
+        veiculo = db.query(VeiculoModel).filter(VeiculoModel.versao_id == versao.id).first()
+        if not veiculo:
+            veiculo = VeiculoModel(
+                versao_id=versao.id,
+                motorizacao="N/A",
+                potencia_cv=1,
+                transmissao="N/A",
+                tracao="N/A",
+                status=True,
+            )
+            db.add(veiculo)
+            db.flush()
+
+        metrica = MetricaVeiculoModel(
+            veiculo_id=veiculo.id,
+            user_id=user_id,
+            preco_sugerido=Decimal("0.00"),
+            pacote_equipamentos={"tipo": "upload_excel"},
+            observacao="upload_excel",
+        )
+        db.add(metrica)
+        db.flush()
+        return metrica.id
+
+    @staticmethod
+    async def processar_upload_excel(
+        db: Session,
+        user_id: int,
+        user_email: str,
+        arquivo: UploadFile,
+        ip_origem: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict:
         nome_original = UploadService._nome_seguro(arquivo.filename)
         extensao = UploadService._validar_tipo_arquivo(nome_original, arquivo.content_type)
 
@@ -66,14 +121,23 @@ class UploadService:
         caminho_arquivo = upload_dir / nome_armazenado
         caminho_arquivo.write_bytes(conteudo)
 
-        log = LogUploadModel(
-            utilizador_email=user_email,
-            nome_original=nome_original,
-            nome_armazenado=nome_armazenado,
-            caminho_armazenado=str(caminho_arquivo),
-            tamanho_bytes=tamanho,
-            mime_type=(arquivo.content_type or "application/octet-stream"),
-            status_upload="sucesso",
+        metrica_id = UploadService._obter_metrica_para_log(db, user_id)
+
+        log = LogModel(
+            metrica_veiculo_id=metrica_id,
+            user_id=user_id,
+            acao="UPLOAD_EXCEL",
+            dados_antes=None,
+            dados_depois={
+                "email": user_email,
+                "nome_original": nome_original,
+                "nome_armazenado": nome_armazenado,
+                "caminho_armazenado": str(caminho_arquivo),
+                "tamanho_bytes": tamanho,
+                "mime_type": arquivo.content_type or "application/octet-stream",
+            },
+            ip=ip_origem,
+            user_agent=(user_agent or "")[0:50] or None,
         )
         db.add(log)
         db.commit()
@@ -83,5 +147,5 @@ class UploadService:
             "mensagem": "Upload realizado com sucesso.",
             "caminho_arquivo": str(caminho_arquivo),
             "nome_arquivo": nome_original,
-            "tamanho_bytes": tamanho,
+            "metrica_id": metrica_id,
         }

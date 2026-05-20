@@ -33,7 +33,7 @@ class Settings:
     PAYLOAD_SECRET_HMAC: bytes = os.getenv("PAYLOAD_SECRET_HMAC", "IntegrityKeyDefault").encode()
     MAX_CONTENT_LENGTH: int = _ler_int("MAX_CONTENT_LENGTH_KB", 50) * 1024
 
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./inteligencia_automotiva.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sistema_veiculos.db")
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", str(Path("data") / "uploads"))
     MAX_UPLOAD_FILE_SIZE: int = _ler_int("MAX_UPLOAD_FILE_SIZE_MB", 10) * 1024 * 1024

@@ -1,57 +1,130 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+)
+from sqlalchemy.dialects import mysql
+from sqlalchemy.orm import relationship
 
 from app.db.session import Base
 
 
-class UtilizadorModel(Base):
-    __tablename__ = "utilizadores"
+BIGINT_ID = BigInteger().with_variant(mysql.BIGINT(unsigned=True), "mysql").with_variant(Integer, "sqlite")
 
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(120), unique=True, index=True, nullable=False)
+
+class UserModel(Base):
+    __tablename__ = "users"
+
+    id = Column(BIGINT_ID, primary_key=True, autoincrement=True, index=True)
+    nome = Column(String(120), nullable=False)
     email = Column(String(120), unique=True, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), default="usuario", nullable=False)  # admin, analista, usuario
-    ativo = Column(Boolean, default=True)
-    criado_em = Column(DateTime, default=datetime.utcnow)
+    password = Column(String(255), nullable=False)
+    role = Column(String(30), nullable=False, default="user")
+    status = Column(Boolean, nullable=False, default=True)
+    create_date = Column(Date, nullable=False, default=date.today)
+    hour_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    metricas = relationship("MetricaVeiculoModel", back_populates="user")
+    logs = relationship("LogModel", back_populates="user")
+
+
+class ModeloModel(Base):
+    __tablename__ = "modelos"
+
+    id = Column(BIGINT_ID, primary_key=True, autoincrement=True, index=True)
+    marca = Column(String(100), nullable=False)
+    nome = Column(String(100), nullable=False)
+    create_date = Column(Date, nullable=False, default=date.today)
+    hour_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    versoes = relationship("VersaoModel", back_populates="modelo")
+
+
+class VersaoModel(Base):
+    __tablename__ = "versoes"
+
+    id = Column(BIGINT_ID, primary_key=True, autoincrement=True, index=True)
+    modelo_id = Column(BIGINT_ID, ForeignKey("modelos.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False, index=True)
+    nome = Column(String(100), nullable=False)
+    create_date = Column(Date, nullable=False, default=date.today)
+    hour_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    modelo = relationship("ModeloModel", back_populates="versoes")
+    veiculos = relationship("VeiculoModel", back_populates="versao")
 
 
 class VeiculoModel(Base):
     __tablename__ = "veiculos"
 
-    id = Column(Integer, primary_key=True, index=True)
-    marca = Column(String(50), index=True, nullable=False)
-    modelo = Column(String(50), index=True, nullable=False)
-    versao = Column(String(50), index=True, nullable=False)
-    motorizacao = Column(String(100), default="nao disponivel")
-    potencia = Column(String(50), default="nao disponivel")
-    transmissao = Column(String(50), default="nao disponivel")
-    tracao = Column(String(50), default="nao disponivel")
-    preco_sugerido = Column(String(50), default="nao disponivel")
-    pacote_equipamentos = Column(Text, default="{}")  # armazenamento JSON estruturado
+    id = Column(BIGINT_ID, primary_key=True, autoincrement=True, index=True)
+    versao_id = Column(BIGINT_ID, ForeignKey("versoes.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False, index=True)
+    motorizacao = Column(String(100), nullable=False)
+    potencia_cv = Column(Integer, nullable=False)
+    transmissao = Column(String(50), nullable=False)
+    tracao = Column(String(50), nullable=False)
+    status = Column(Boolean, nullable=False, default=True)
+    create_date = Column(Date, nullable=False, default=date.today)
+    hour_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    versao = relationship("VersaoModel", back_populates="veiculos")
+    metricas = relationship("MetricaVeiculoModel", back_populates="veiculo")
 
 
-class LogAuditoriaModel(Base):
-    __tablename__ = "logs_auditoria"
+class MetricaVeiculoModel(Base):
+    __tablename__ = "metricas_veiculos"
 
-    id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    utilizador = Column(String(120), index=True, nullable=True)
-    acao = Column(String(100), nullable=False)
-    detalhes = Column(Text, nullable=True)
-    ip_origem = Column(String(45), nullable=True)
+    id = Column(BIGINT_ID, primary_key=True, autoincrement=True, index=True)
+    veiculo_id = Column(BIGINT_ID, ForeignKey("veiculos.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False, index=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False, index=True)
+    preco_sugerido = Column(Numeric(12, 2), nullable=False)
+    pacote_equipamentos = Column(JSON, nullable=True)
+    observacao = Column(String(120), nullable=True)
+    create_date = Column(Date, nullable=False, default=date.today)
+    hour_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    veiculo = relationship("VeiculoModel", back_populates="metricas")
+    user = relationship("UserModel", back_populates="metricas")
+    logs = relationship("LogModel", back_populates="metrica")
 
 
-class LogUploadModel(Base):
-    __tablename__ = "logs_upload"
+class LogModel(Base):
+    __tablename__ = "logs"
 
-    id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    utilizador_email = Column(String(120), index=True, nullable=False)
-    nome_original = Column(String(255), nullable=False)
-    nome_armazenado = Column(String(255), nullable=False)
-    caminho_armazenado = Column(String(500), nullable=False)
-    tamanho_bytes = Column(Integer, nullable=False)
-    mime_type = Column(String(120), nullable=False)
-    status_upload = Column(String(20), default="sucesso", nullable=False)
+    id = Column(BIGINT_ID, primary_key=True, autoincrement=True, index=True)
+    metrica_veiculo_id = Column(
+        BIGINT_ID,
+        ForeignKey("metricas_veiculos.id", ondelete="RESTRICT", onupdate="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False, index=True)
+    acao = Column(String(50), nullable=False)
+    dados_antes = Column(JSON, nullable=True)
+    dados_depois = Column(JSON, nullable=True)
+    ip = Column(String(45), nullable=True)
+    user_agent = Column(String(50), nullable=True)
+    create_date = Column(Date, nullable=False, default=date.today)
+    hour_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    metrica = relationship("MetricaVeiculoModel", back_populates="logs")
+    user = relationship("UserModel", back_populates="logs")
+
+
+class PasswordResetTokenModel(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(BIGINT_ID, primary_key=True, autoincrement=True, index=True)
+    user_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, index=True)
+    token = Column(String(255), nullable=False)
+    expires_at = Column(Date, nullable=False)
+    create_at = Column(Date, nullable=False, default=date.today)
+    hour_date = Column(DateTime, nullable=False, default=datetime.utcnow)

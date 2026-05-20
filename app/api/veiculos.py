@@ -1,33 +1,66 @@
-from fastapi import APIRouter, Depends, Request, status, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from app.api.deps import obter_db, verificar_rbac
-from app.schemas.schemas import ConsultaVeiculoInput, CadastroVeiculoInput
-from app.services.veiculo_service import VeiculoService
-from app.services.auditoria_service import AuditoriaService
 
-router = APIRouter(prefix="/veiculos", tags=["Catálogo e Inteligência Automotiva"])
+from app.api.deps import obter_db, verificar_rbac
+from app.schemas.schemas import CadastroVeiculoInput, ConsultaVeiculoInput
+from app.services.auditoria_service import AuditoriaService
+from app.services.veiculo_service import VeiculoService
+
+router = APIRouter(prefix="/veiculos", tags=["Catalogo e Inteligencia Automotiva"])
+
 
 @router.post("/comparar", status_code=status.HTTP_200_OK)
-def comparar_veiculos(payload: ConsultaVeiculoInput, request: Request, token_data: dict = Depends(verificar_rbac(["admin", "analista", "usuario"])), db: Session = Depends(obter_db)):
+def comparar_veiculos(
+    payload: ConsultaVeiculoInput,
+    request: Request,
+    token_data: dict = Depends(verificar_rbac(["admin", "analista", "user"])),
+    db: Session = Depends(obter_db),
+):
     ip = request.client.host if request.client else "127.0.0.1"
-    
-    # Executa a inteligência de negócios isolada na camada de Serviço
+
     resposta = VeiculoService.processar_analise_competitiva(db, payload)
-    
-    # Auditoria de Cybersecurity ativa para relatórios massivos
+
     if token_data["role"] == "analista":
-        AuditoriaService.registar_evento(db, token_data["email"], "EXTRACAO_COMPETITIVA", f"Pesquisa sobre {payload.marca} {payload.modelo}", ip)
-        
+        AuditoriaService.registar_evento(
+            db,
+            user_id=token_data["user_id"],
+            acao="EXTRACAO_COMPETITIVA",
+            ip_origem=ip,
+            user_agent=request.headers.get("user-agent"),
+            dados_depois={"marca": payload.marca, "modelo": payload.modelo, "versao": payload.versao},
+        )
+
     return resposta
 
+
 @router.post("", status_code=status.HTTP_201_CREATED)
-def cadastrar_veiculo(payload: CadastroVeiculoInput, request: Request, token_data: dict = Depends(verificar_rbac(["admin"])), db: Session = Depends(obter_db)):
+def cadastrar_veiculo(
+    payload: CadastroVeiculoInput,
+    request: Request,
+    token_data: dict = Depends(verificar_rbac(["admin"])),
+    db: Session = Depends(obter_db),
+):
     ip = request.client.host if request.client else "127.0.0.1"
+
     existente = VeiculoService.procurar_veiculo_especifico(db, payload.marca, payload.modelo, payload.versao)
-    
     if existente:
-        raise HTTPException(status_code=400, detail="Veículo já cadastrado no catálogo.")
-        
-    veiculo_salvo = VeiculoService.registar_novo_veiculo(db, payload)
-    AuditoriaService.registar_evento(db, token_data["email"], "CADASTRO_VEICULO", f"Inserido {payload.marca} {payload.modelo}", ip)
-    return {"status": "sucesso", "id": veiculo_salvo.id}
+        raise HTTPException(status_code=400, detail="Veiculo ja cadastrado no catalogo.")
+
+    veiculo_salvo, metrica = VeiculoService.registar_novo_veiculo(db, payload, token_data["user_id"])
+
+    AuditoriaService.registar_evento(
+        db,
+        user_id=token_data["user_id"],
+        metrica_veiculo_id=metrica.id if metrica else None,
+        acao="CADASTRO_VEICULO",
+        ip_origem=ip,
+        user_agent=request.headers.get("user-agent"),
+        dados_depois={
+            "veiculo_id": veiculo_salvo.id,
+            "marca": payload.marca,
+            "modelo": payload.modelo,
+            "versao": payload.versao,
+        },
+    )
+
+    return {"status": "sucesso", "id": veiculo_salvo.id, "metrica_id": metrica.id if metrica else None}

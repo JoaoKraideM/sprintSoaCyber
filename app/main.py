@@ -1,4 +1,4 @@
-import json
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -11,18 +11,16 @@ from app.api.veiculos import router as veiculos_router
 from app.core.middleware import seguranca_middleware_global
 from app.core.security import gerar_hash_credencial
 from app.db.session import Base, SessionLocal, engine
-from app.models.modelos import UtilizadorModel, VeiculoModel
+from app.models.modelos import MetricaVeiculoModel, ModeloModel, UserModel, VeiculoModel, VersaoModel
 
 app = FastAPI(
     title="Plataforma de Inteligencia Competitiva Automotiva (SOA + Cyber Secure)",
     description="Base de cadastro, autenticacao JWT e upload Excel com arquitetura em camadas.",
-    version="3.0.0",
+    version="3.1.0",
 )
 
-# Acoplamento dos middlewares reutilizaveis de seguranca.
 app.middleware("http")(seguranca_middleware_global)
 
-# Montagem modular dos servicos independentes (SOA).
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(veiculos_router, prefix="/api/v1")
 app.include_router(uploads_router, prefix="/api/v1")
@@ -38,52 +36,86 @@ def servir_site():
 
 @app.on_event("startup")
 def inicializar_e_validar_dados():
-    # Garante a migracao das tabelas na camada de dados.
     Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
     try:
-        # Criacao dos perfis base para validacao do RBAC.
-        if not db.query(UtilizadorModel).filter_by(email="admin_bradesco@sistema.local").first():
-            db.add(
-                UtilizadorModel(
-                    username="admin_bradesco@sistema.local",
-                    email="admin_bradesco@sistema.local",
-                    password_hash=gerar_hash_credencial("admin_bradesco@sistema.local", "SenhaForte123"),
-                    role="admin",
-                )
+        admin = db.query(UserModel).filter_by(email="admin_bradesco@sistema.local").first()
+        if not admin:
+            admin = UserModel(
+                nome="Admin Bradesco",
+                email="admin_bradesco@sistema.local",
+                password=gerar_hash_credencial("admin_bradesco@sistema.local", "SenhaForte123"),
+                role="admin",
+                status=True,
             )
+            db.add(admin)
+            db.flush()
 
-        if not db.query(UtilizadorModel).filter_by(email="analista_mercado@sistema.local").first():
-            db.add(
-                UtilizadorModel(
-                    username="analista_mercado@sistema.local",
-                    email="analista_mercado@sistema.local",
-                    password_hash=gerar_hash_credencial("analista_mercado@sistema.local", "Analise789"),
-                    role="analista",
-                )
+        analista = db.query(UserModel).filter_by(email="analista_mercado@sistema.local").first()
+        if not analista:
+            analista = UserModel(
+                nome="Analista Mercado",
+                email="analista_mercado@sistema.local",
+                password=gerar_hash_credencial("analista_mercado@sistema.local", "Analise789"),
+                role="analista",
+                status=True,
             )
+            db.add(analista)
+            db.flush()
 
-        # Validacao mandataria do desafio: insercao previa da Ford Ranger Raptor.
-        if not db.query(VeiculoModel).filter_by(modelo="Ranger Raptor").first():
-            pacote_raptor = {
-                "Painel Digital": "12.4 polegadas",
-                "Som": "Premium Bang & Olufsen",
-                "Modos de Conducao": "7 modos (incluindo Baja)",
-                "Amortecedores": "FOX Live Valve 2.5",
-            }
-            raptor = VeiculoModel(
-                marca="Ford",
-                modelo="Ranger Raptor",
-                versao="3.0 V6 Bi-Turbo",
+        modelo = db.query(ModeloModel).filter_by(marca="Ford", nome="Ranger Raptor").first()
+        if not modelo:
+            modelo = ModeloModel(marca="Ford", nome="Ranger Raptor")
+            db.add(modelo)
+            db.flush()
+
+        versao = db.query(VersaoModel).filter_by(modelo_id=modelo.id, nome="3.0 V6 Bi-Turbo").first()
+        if not versao:
+            versao = VersaoModel(modelo_id=modelo.id, nome="3.0 V6 Bi-Turbo")
+            db.add(versao)
+            db.flush()
+
+        veiculo = (
+            db.query(VeiculoModel)
+            .filter(
+                VeiculoModel.versao_id == versao.id,
+                VeiculoModel.motorizacao == "3.0L V6 EcoBoost Gasolina",
+                VeiculoModel.potencia_cv == 397,
+            )
+            .first()
+        )
+        if not veiculo:
+            veiculo = VeiculoModel(
+                versao_id=versao.id,
                 motorizacao="3.0L V6 EcoBoost Gasolina",
-                potencia="397 cv",
+                potencia_cv=397,
                 transmissao="Automatica de 10 marchas",
                 tracao="4x4 integral",
-                preco_sugerido="Sob Consulta",
-                pacote_equipamentos=json.dumps(pacote_raptor),
+                status=True,
             )
-            db.add(raptor)
+            db.add(veiculo)
+            db.flush()
+
+        metrica = (
+            db.query(MetricaVeiculoModel)
+            .filter(MetricaVeiculoModel.veiculo_id == veiculo.id, MetricaVeiculoModel.user_id == admin.id)
+            .first()
+        )
+        if not metrica:
+            metrica = MetricaVeiculoModel(
+                veiculo_id=veiculo.id,
+                user_id=admin.id,
+                preco_sugerido=Decimal("0.00"),
+                pacote_equipamentos={
+                    "Painel Digital": "12.4 polegadas",
+                    "Som": "Premium Bang & Olufsen",
+                    "Modos de Conducao": "7 modos (incluindo Baja)",
+                    "Amortecedores": "FOX Live Valve 2.5",
+                },
+                observacao="Seed inicial Ford Ranger Raptor",
+            )
+            db.add(metrica)
 
         db.commit()
     finally:

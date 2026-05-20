@@ -52,11 +52,12 @@ registerForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   setFeedback(registerFeedback, "Processando cadastro...", "ok");
 
+  const nome = document.getElementById("register-nome").value;
   const email = document.getElementById("register-email").value;
   const password = document.getElementById("register-password").value;
 
   try {
-    const data = await postJson(`${API_BASE}/auth/register`, { email, password });
+    const data = await postJson(`${API_BASE}/auth/register`, { nome, email, password });
     setFeedback(registerFeedback, `Usuario ${data.email} cadastrado com sucesso.`, "ok");
     registerForm.reset();
   } catch (erro) {

@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -14,30 +13,40 @@ from app.core.security import (
     gerar_hash_credencial,
     normalizar_email,
     verificar_hash_credencial,
-    verificar_palavra_passe,
 )
-from app.models.modelos import UtilizadorModel
+from app.models.modelos import UserModel
+
+
+ROLE_MAP = {
+    "usuario": "user",
+    "user": "user",
+    "analista": "analista",
+    "admin": "admin",
+}
 
 
 class AuthService:
     @staticmethod
-    def cadastrar_utilizador(db: Session, email: str, password: str, role: str = "usuario") -> UtilizadorModel:
+    def normalizar_role(role: str) -> str:
+        role_limpa = (role or "user").strip().lower()
+        return ROLE_MAP.get(role_limpa, "user")
+
+    @staticmethod
+    def cadastrar_utilizador(db: Session, email: str, password: str, role: str = "user", nome: str | None = None) -> UserModel:
         email_normalizado = normalizar_email(email)
 
-        existente = (
-            db.query(UtilizadorModel)
-            .filter(or_(UtilizadorModel.email == email_normalizado, UtilizadorModel.username == email_normalizado))
-            .first()
-        )
+        existente = db.query(UserModel).filter(UserModel.email == email_normalizado).first()
         if existente:
             raise ValueError("Utilizador ja cadastrado.")
 
-        novo = UtilizadorModel(
-            username=email_normalizado,
+        nome_final = (nome or "").strip() or email_normalizado.split("@")[0]
+
+        novo = UserModel(
+            nome=nome_final,
             email=email_normalizado,
-            password_hash=gerar_hash_credencial(email_normalizado, password),
-            role=role,
-            ativo=True,
+            password=gerar_hash_credencial(email_normalizado, password),
+            role=AuthService.normalizar_role(role),
+            status=True,
         )
         db.add(novo)
         db.commit()
@@ -47,30 +56,19 @@ class AuthService:
     @staticmethod
     def obter_utilizador_por_email(db: Session, email: str):
         email_normalizado = normalizar_email(email)
-        return (
-            db.query(UtilizadorModel)
-            .filter(or_(UtilizadorModel.email == email_normalizado, UtilizadorModel.username == email_normalizado))
-            .first()
-        )
+        return db.query(UserModel).filter(UserModel.email == email_normalizado).first()
 
     @staticmethod
     def autenticar_utilizador(db: Session, email: str, palavra_passe: str):
         user = AuthService.obter_utilizador_por_email(db, email)
-        if not user or not user.ativo:
+        if not user or not user.status:
             return None
 
         try:
-            if verificar_hash_credencial(user.email, palavra_passe, user.password_hash):
+            if verificar_hash_credencial(user.email, palavra_passe, user.password):
                 return user
         except ValueError:
             return None
-
-        # Compatibilidade com hash legado (senha sem email concatenado).
-        if len(palavra_passe) >= 8 and verificar_palavra_passe(palavra_passe, user.password_hash):
-            user.password_hash = gerar_hash_credencial(user.email, palavra_passe)
-            db.commit()
-            db.refresh(user)
-            return user
 
         return None
 
@@ -139,5 +137,5 @@ class AuthService:
         }
 
     @staticmethod
-    def fingerprint_atual_do_utilizador(user: UtilizadorModel) -> str:
-        return gerar_fingerprint_hash(user.password_hash)
+    def fingerprint_atual_do_utilizador(user: UserModel) -> str:
+        return gerar_fingerprint_hash(user.password)

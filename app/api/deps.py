@@ -28,7 +28,7 @@ def verificar_rbac(papeis_permitidos: list):
         try:
             payload = AuthService.validar_token_jwt(token)
             user = AuthService.obter_utilizador_por_email(db, payload["sub"])
-            if not user or not user.ativo:
+            if not user or not user.status:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Utilizador inexistente ou inativo.",
@@ -49,7 +49,8 @@ def verificar_rbac(papeis_permitidos: list):
                 )
 
             return {
-                "username": user.username,
+                "user_id": user.id,
+                "nome": user.nome,
                 "email": user.email,
                 "role": role,
                 "exp": payload["exp"],

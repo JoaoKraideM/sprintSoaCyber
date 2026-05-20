@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -6,9 +7,18 @@ from app.core.security import normalizar_email, sanitizar_string, validar_forca_
 
 
 class CadastroUsuarioInput(BaseModel):
+    nome: Optional[str] = Field(default=None, max_length=120)
     email: str = Field(..., max_length=120)
     password: str = Field(..., min_length=8, max_length=120)
-    role: str = Field(default="usuario", max_length=20)
+    role: str = Field(default="user", max_length=30)
+
+    @field_validator("nome", mode="before")
+    @classmethod
+    def validar_nome(cls, v):
+        if v is None:
+            return None
+        nome = sanitizar_string(v)
+        return nome or None
 
     @field_validator("email", mode="before")
     @classmethod
@@ -25,7 +35,7 @@ class CadastroUsuarioInput(BaseModel):
     @classmethod
     def validar_role(cls, v):
         role = sanitizar_string(v).lower()
-        if role not in {"admin", "analista", "usuario"}:
+        if role not in {"admin", "analista", "user", "usuario"}:
             raise ValueError("Role invalida.")
         return role
 
@@ -50,9 +60,9 @@ class LoginInput(BaseModel):
 
 
 class ConsultaVeiculoInput(BaseModel):
-    marca: str = Field(..., max_length=50)
-    modelo: str = Field(..., max_length=50)
-    versao: str = Field(..., max_length=50)
+    marca: str = Field(..., max_length=100)
+    modelo: str = Field(..., max_length=100)
+    versao: str = Field(..., max_length=100)
     atributos_desejados: List[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("marca", "modelo", "versao", mode="before")
@@ -71,31 +81,27 @@ class ConsultaVeiculoInput(BaseModel):
 
 
 class CadastroVeiculoInput(BaseModel):
-    marca: str = Field(..., max_length=50)
-    modelo: str = Field(..., max_length=50)
-    versao: str = Field(..., max_length=50)
-    motorizacao: Optional[str] = "nao disponivel"
-    potencia: Optional[str] = "nao disponivel"
-    transmissao: Optional[str] = "nao disponivel"
-    tracao: Optional[str] = "nao disponivel"
-    preco_sugerido: Optional[str] = "nao disponivel"
+    marca: str = Field(..., max_length=100)
+    modelo: str = Field(..., max_length=100)
+    versao: str = Field(..., max_length=100)
+    motorizacao: str = Field(..., max_length=100)
+    potencia_cv: int = Field(..., ge=1)
+    transmissao: str = Field(..., max_length=50)
+    tracao: str = Field(..., max_length=50)
+    preco_sugerido: Decimal = Field(..., ge=0)
     pacote_equipamentos: Dict[str, Any] = Field(default_factory=dict)
+    observacao: Optional[str] = Field(default=None, max_length=120)
 
-    @field_validator(
-        "marca",
-        "modelo",
-        "versao",
-        "motorizacao",
-        "potencia",
-        "transmissao",
-        "tracao",
-        "preco_sugerido",
-        mode="before",
-    )
+    @field_validator("marca", "modelo", "versao", "motorizacao", "transmissao", "tracao", mode="before")
     @classmethod
     def sanitizar_campos(cls, v):
+        return sanitizar_string(v)
+
+    @field_validator("observacao", mode="before")
+    @classmethod
+    def sanitizar_observacao(cls, v):
         if v is None:
-            return v
+            return None
         return sanitizar_string(v)
 
 
@@ -104,3 +110,4 @@ class UploadArquivoResposta(BaseModel):
     mensagem: str
     caminho_arquivo: str
     nome_arquivo: str
+    metrica_id: Optional[int] = None

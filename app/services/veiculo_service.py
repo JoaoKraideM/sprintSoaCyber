@@ -1,59 +1,123 @@
-import json
+from decimal import Decimal
+
 from sqlalchemy.orm import Session
-from app.models.modelos import VeiculoModel
+
+from app.models.modelos import MetricaVeiculoModel, ModeloModel, VeiculoModel, VersaoModel
 from app.schemas.schemas import CadastroVeiculoInput, ConsultaVeiculoInput
 
+
 class VeiculoService:
-    """Camada de Serviço Core: Isola as regras de inteligência de mercado automotivo"""
-    
+    """Camada de servico core: isola regras de negocio do catalogo automotivo."""
+
     @staticmethod
     def procurar_veiculo_especifico(db: Session, marca: str, modelo: str, versao: str):
-        return db.query(VeiculoModel).filter(
-            VeiculoModel.marca == marca,
-            VeiculoModel.modelo == modelo,
-            VeiculoModel.versao == versao
-        ).first()
+        return (
+            db.query(VeiculoModel)
+            .join(VersaoModel, VeiculoModel.versao_id == VersaoModel.id)
+            .join(ModeloModel, VersaoModel.modelo_id == ModeloModel.id)
+            .filter(
+                ModeloModel.marca == marca,
+                ModeloModel.nome == modelo,
+                VersaoModel.nome == versao,
+                VeiculoModel.status.is_(True),
+            )
+            .first()
+        )
+
+    @staticmethod
+    def obter_ultima_metrica(db: Session, veiculo_id: int):
+        return (
+            db.query(MetricaVeiculoModel)
+            .filter(MetricaVeiculoModel.veiculo_id == veiculo_id)
+            .order_by(MetricaVeiculoModel.hour_date.desc(), MetricaVeiculoModel.id.desc())
+            .first()
+        )
 
     @staticmethod
     def processar_analise_competitiva(db: Session, payload: ConsultaVeiculoInput) -> dict:
         veiculo = VeiculoService.procurar_veiculo_especifico(db, payload.marca, payload.modelo, payload.versao)
-        
-        # Saída Obrigatória unificada exigida pelo edital do desafio
+        metrica = VeiculoService.obter_ultima_metrica(db, veiculo.id) if veiculo else None
+
+        equipamentos_map = metrica.pacote_equipamentos if metrica and metrica.pacote_equipamentos else {}
+
         saida_padronizada = {
             "marca": payload.marca,
             "modelo": payload.modelo,
             "versao": payload.versao,
             "dados_tecnicos_principais": {
-                "motorizacao": veiculo.motorizacao if veiculo else "vazio / não disponível",
-                "potencia": veiculo.potencia if veiculo else "vazio / não disponível",
-                "transmissao": veiculo.transmissao if veiculo else "vazio / não disponível",
-                "tracao": veiculo.tracao if veiculo else "vazio / não disponível",
-                "preco_sugerido": veiculo.preco_sugerido if veiculo else "vazio / não disponível"
+                "motorizacao": veiculo.motorizacao if veiculo else "vazio / nao disponivel",
+                "potencia_cv": veiculo.potencia_cv if veiculo else "vazio / nao disponivel",
+                "transmissao": veiculo.transmissao if veiculo else "vazio / nao disponivel",
+                "tracao": veiculo.tracao if veiculo else "vazio / nao disponivel",
+                "preco_sugerido": str(metrica.preco_sugerido) if metrica else "vazio / nao disponivel",
             },
-            "equipamentos_pesquisados_livres": {}
+            "equipamentos_pesquisados_livres": {},
         }
-        
-        equipamentos_map = {}
-        if veiculo and veiculo.pacote_equipamentos:
-            try:
-                equipamentos_map = json.loads(veiculo.pacote_equipamentos)
-            except Exception:
-                pass
-                
+
         for atributo in payload.atributos_desejados:
-            saida_padronizada["equipamentos_pesquisados_livres"][atributo] = equipamentos_map.get(atributo, "vazio / não disponível")
-            
+            saida_padronizada["equipamentos_pesquisados_livres"][atributo] = equipamentos_map.get(
+                atributo,
+                "vazio / nao disponivel",
+            )
+
         return saida_padronizada
 
     @staticmethod
-    def registar_novo_veiculo(db: Session, v: CadastroVeiculoInput):
+    def _obter_ou_criar_modelo_versao(db: Session, marca: str, modelo: str, versao: str):
+        modelo_db = db.query(ModeloModel).filter(ModeloModel.marca == marca, ModeloModel.nome == modelo).first()
+        if not modelo_db:
+            modelo_db = ModeloModel(marca=marca, nome=modelo)
+            db.add(modelo_db)
+            db.flush()
+
+        versao_db = db.query(VersaoModel).filter(VersaoModel.modelo_id == modelo_db.id, VersaoModel.nome == versao).first()
+        if not versao_db:
+            versao_db = VersaoModel(modelo_id=modelo_db.id, nome=versao)
+            db.add(versao_db)
+            db.flush()
+
+        return modelo_db, versao_db
+
+    @staticmethod
+    def registar_novo_veiculo(db: Session, v: CadastroVeiculoInput, user_id: int):
+        _, versao_db = VeiculoService._obter_ou_criar_modelo_versao(db, v.marca, v.modelo, v.versao)
+
+        existente = (
+            db.query(VeiculoModel)
+            .filter(
+                VeiculoModel.versao_id == versao_db.id,
+                VeiculoModel.motorizacao == v.motorizacao,
+                VeiculoModel.potencia_cv == v.potencia_cv,
+                VeiculoModel.transmissao == v.transmissao,
+                VeiculoModel.tracao == v.tracao,
+                VeiculoModel.status.is_(True),
+            )
+            .first()
+        )
+        if existente:
+            return existente, VeiculoService.obter_ultima_metrica(db, existente.id)
+
         novo = VeiculoModel(
-            marca=v.marca, modelo=v.modelo, versao=v.versao,
-            motorizacao=v.motorizacao, potencia=v.potencia,
-            transmissao=v.transmissao, tracao=v.tracao,
-            preco_sugerido=v.preco_sugerido,
-            pacote_equipamentos=json.dumps(v.pacote_equipamentos)
+            versao_id=versao_db.id,
+            motorizacao=v.motorizacao,
+            potencia_cv=v.potencia_cv,
+            transmissao=v.transmissao,
+            tracao=v.tracao,
+            status=True,
         )
         db.add(novo)
+        db.flush()
+
+        metrica = MetricaVeiculoModel(
+            veiculo_id=novo.id,
+            user_id=user_id,
+            preco_sugerido=Decimal(v.preco_sugerido),
+            pacote_equipamentos=v.pacote_equipamentos,
+            observacao=v.observacao,
+        )
+        db.add(metrica)
         db.commit()
-        return novo
+        db.refresh(novo)
+        db.refresh(metrica)
+
+        return novo, metrica
