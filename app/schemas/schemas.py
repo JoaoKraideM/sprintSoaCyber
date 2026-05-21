@@ -60,7 +60,7 @@ class LoginInput(BaseModel):
 
 
 class ConsultaVeiculoInput(BaseModel):
-    marca: str = Field(..., max_length=100)
+    marca: str = Field(..., max_length=255)
     modelo: str = Field(..., max_length=100)
     versao: str = Field(..., max_length=100)
     atributos_desejados: List[str] = Field(default_factory=list, max_length=20)
@@ -81,7 +81,7 @@ class ConsultaVeiculoInput(BaseModel):
 
 
 class CadastroVeiculoInput(BaseModel):
-    marca: str = Field(..., max_length=100)
+    marca: str = Field(..., max_length=255)
     modelo: str = Field(..., max_length=100)
     versao: str = Field(..., max_length=100)
     motorizacao: str = Field(..., max_length=100)

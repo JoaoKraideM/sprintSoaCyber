@@ -11,14 +11,18 @@ Aplicacao web e API em Python (FastAPI) com:
 
 Tabelas implementadas no codigo:
 - `users`
+- `marcas`
 - `modelos`
 - `versoes`
 - `veiculos`
 - `metricas_veiculos`
 - `logs`
+- `logs_auth`
 - `password_reset_tokens`
 
-O SQL de criacao esta em [tabelas.sql](C:/Users/e44402854814/Desktop/sprint/sprintSoaCyber/projeto_inteligencia_automotiva_SOA_v2/tabelas.sql).
+Importante:
+- A aplicacao **nao cria tabelas automaticamente** no startup.
+- O banco e as tabelas devem existir previamente no ambiente.
 
 ## Autenticacao
 
@@ -28,11 +32,13 @@ Fluxo:
 3. Login valida esse hash.
 4. JWT inclui `sub`, `role`, `cred_fingerprint`, `dados_base64`, `iat`, `exp`.
 5. RBAC valida assinatura, expiracao, integridade do Base64 e fingerprint atual da credencial.
+6. Tentativas de autenticacao sao registradas em `logs_auth` (sucesso/falha).
 
 ## Veiculos e metricas
 
 Cadastro (`POST /api/v1/veiculos`) grava:
-- `modelos` (se nao existir)
+- `marcas` (se nao existir)
+- `modelos` (se nao existir para a marca)
 - `versoes` (se nao existir)
 - `veiculos`
 - `metricas_veiculos`
@@ -48,14 +54,14 @@ Regras:
 - aceita apenas `.xlsx` e `.xls`
 - valida MIME e tamanho
 - salva arquivo em `UPLOAD_DIR`
-- registra evento em `logs` (vinculado a `metricas_veiculos` e `users`)
+- registra evento em `logs` apenas quando existe `metrica_veiculo` vinculada ao usuario
 
 ## Configuracao
 
 Use `.env` (ou variaveis de ambiente), com base em `.env.example`.
 
 Principal:
-- `DATABASE_URL` (padrao local: `sqlite:///./sistema_veiculos.db`)
+- `DATABASE_URL` (padrao local: `sqlite:///./veiculos_db.db`)
 - `SECRET_KEY`
 - `ALGORITHM`
 - `ACCESS_TOKEN_EXPIRE_MINUTES`
@@ -68,9 +74,3 @@ Principal:
 py -3 -m pip install -r requirements.txt
 py -3 run.py
 ```
-
-## Seeds no startup
-
-- `admin_bradesco@sistema.local` / `SenhaForte123`
-- `analista_mercado@sistema.local` / `Analise789`
-- Base Ford Ranger Raptor em `modelos/versoes/veiculos/metricas_veiculos`

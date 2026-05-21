@@ -14,7 +14,7 @@ from app.core.security import (
     normalizar_email,
     verificar_hash_credencial,
 )
-from app.models.modelos import UserModel
+from app.models.modelos import LogAuthModel, UserModel
 
 
 ROLE_MAP = {
@@ -139,3 +139,26 @@ class AuthService:
     @staticmethod
     def fingerprint_atual_do_utilizador(user: UserModel) -> str:
         return gerar_fingerprint_hash(user.password)
+
+    @staticmethod
+    def registar_log_auth(
+        db: Session,
+        user_id: int | None,
+        address: str | None,
+        ip: str | None,
+        user_agent: str | None,
+        status: bool,
+        expires_at: datetime | None = None,
+    ) -> LogAuthModel:
+        log_auth = LogAuthModel(
+            user_id=user_id,
+            address=(address or "")[:100] or None,
+            ip=(ip or "")[:45] or None,
+            user_agent=(user_agent or "")[:255] or None,
+            status=bool(status),
+            expires_at=expires_at,
+        )
+        db.add(log_auth)
+        db.commit()
+        db.refresh(log_auth)
+        return log_auth

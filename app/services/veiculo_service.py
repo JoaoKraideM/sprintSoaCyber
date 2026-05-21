@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.models.modelos import MetricaVeiculoModel, ModeloModel, VeiculoModel, VersaoModel
+from app.models.modelos import MarcaModel, MetricaVeiculoModel, ModeloModel, VeiculoModel, VersaoModel
 from app.schemas.schemas import CadastroVeiculoInput, ConsultaVeiculoInput
 
 
@@ -15,8 +15,9 @@ class VeiculoService:
             db.query(VeiculoModel)
             .join(VersaoModel, VeiculoModel.versao_id == VersaoModel.id)
             .join(ModeloModel, VersaoModel.modelo_id == ModeloModel.id)
+            .join(MarcaModel, ModeloModel.marca_id == MarcaModel.id)
             .filter(
-                ModeloModel.marca == marca,
+                MarcaModel.nome == marca,
                 ModeloModel.nome == modelo,
                 VersaoModel.nome == versao,
                 VeiculoModel.status.is_(True),
@@ -29,7 +30,11 @@ class VeiculoService:
         return (
             db.query(MetricaVeiculoModel)
             .filter(MetricaVeiculoModel.veiculo_id == veiculo_id)
-            .order_by(MetricaVeiculoModel.hour_date.desc(), MetricaVeiculoModel.id.desc())
+            .order_by(
+                MetricaVeiculoModel.create_date.desc(),
+                MetricaVeiculoModel.hour_date.desc(),
+                MetricaVeiculoModel.id.desc(),
+            )
             .first()
         )
 
@@ -64,9 +69,15 @@ class VeiculoService:
 
     @staticmethod
     def _obter_ou_criar_modelo_versao(db: Session, marca: str, modelo: str, versao: str):
-        modelo_db = db.query(ModeloModel).filter(ModeloModel.marca == marca, ModeloModel.nome == modelo).first()
+        marca_db = db.query(MarcaModel).filter(MarcaModel.nome == marca).first()
+        if not marca_db:
+            marca_db = MarcaModel(nome=marca)
+            db.add(marca_db)
+            db.flush()
+
+        modelo_db = db.query(ModeloModel).filter(ModeloModel.marca_id == marca_db.id, ModeloModel.nome == modelo).first()
         if not modelo_db:
-            modelo_db = ModeloModel(marca=marca, nome=modelo)
+            modelo_db = ModeloModel(marca_id=marca_db.id, nome=modelo)
             db.add(modelo_db)
             db.flush()
 
@@ -76,11 +87,11 @@ class VeiculoService:
             db.add(versao_db)
             db.flush()
 
-        return modelo_db, versao_db
+        return marca_db, modelo_db, versao_db
 
     @staticmethod
     def registar_novo_veiculo(db: Session, v: CadastroVeiculoInput, user_id: int):
-        _, versao_db = VeiculoService._obter_ou_criar_modelo_versao(db, v.marca, v.modelo, v.versao)
+        _, _, versao_db = VeiculoService._obter_ou_criar_modelo_versao(db, v.marca, v.modelo, v.versao)
 
         existente = (
             db.query(VeiculoModel)

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -56,6 +58,14 @@ def efetuar_login(dados: LoginInput, request: Request, db: Session = Depends(obt
     user = AuthService.autenticar_utilizador(db, email_login, dados.password)
     if not user:
         user_existente = AuthService.obter_utilizador_por_email(db, email_login)
+        AuthService.registar_log_auth(
+            db,
+            user_id=user_existente.id if user_existente else None,
+            address=email_login,
+            ip=ip,
+            user_agent=user_agent,
+            status=False,
+        )
         if user_existente:
             AuditoriaService.registar_evento(
                 db,
@@ -73,6 +83,17 @@ def efetuar_login(dados: LoginInput, request: Request, db: Session = Depends(obt
 
     fingerprint = AuthService.fingerprint_atual_do_utilizador(user)
     token = AuthService.criar_token_jwt(user.email, user.role, fingerprint)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    AuthService.registar_log_auth(
+        db,
+        user_id=user.id,
+        address=user.email,
+        ip=ip,
+        user_agent=user_agent,
+        status=True,
+        expires_at=expires_at,
+    )
 
     AuditoriaService.registar_evento(
         db,
