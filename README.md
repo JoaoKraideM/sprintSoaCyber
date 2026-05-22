@@ -21,8 +21,9 @@ Tabelas implementadas no codigo:
 - `password_reset_tokens`
 
 Importante:
-- A aplicacao **nao cria tabelas automaticamente** no startup.
-- O banco e as tabelas devem existir previamente no ambiente.
+- A aplicacao **nao recria tabelas automaticamente** no startup.
+- O script SQL do schema fica em `app/db/schema.sql`.
+- Para criar/recriar o banco MySQL `veiculos_db`, execute `py -3 -m app.db.init_db`.
 
 ## Autenticacao
 
@@ -61,7 +62,8 @@ Regras:
 Use `.env` (ou variaveis de ambiente), com base em `.env.example`.
 
 Principal:
-- `DATABASE_URL` (padrao local: `sqlite:///./veiculos_db.db`)
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- `DATABASE_URL` (opcional; sobrescreve os campos `DB_*`)
 - `SECRET_KEY`
 - `ALGORITHM`
 - `ACCESS_TOKEN_EXPIRE_MINUTES`
@@ -72,5 +74,12 @@ Principal:
 
 ```bash
 py -3 -m pip install -r requirements.txt
+py -3 -m app.db.init_db
 py -3 run.py
+```
+
+Teste de conexao:
+
+```bash
+curl http://127.0.0.1:8000/health/db
 ```
