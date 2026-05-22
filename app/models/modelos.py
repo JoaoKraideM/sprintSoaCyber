@@ -125,7 +125,7 @@ class MetricaVeiculoModel(AuditColumnsMixin, Base):
     id = Column(BIGINT_ID, primary_key=True, autoincrement=True)
     veiculo_id = Column(BIGINT_ID, ForeignKey("veiculos.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False)
     user_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False)
-    preco_sugerido = Column(Numeric(12, 2), nullable=False)
+    preco_sugerido = Column(Numeric(12, 2), nullable=True)
     pacote_equipamentos = Column(JSON, nullable=True)
     observacao = Column(String(120), nullable=True)
 

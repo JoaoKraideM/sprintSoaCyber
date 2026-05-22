@@ -123,7 +123,7 @@ CREATE TABLE metricas_veiculos (
     veiculo_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED NOT NULL,
 
-    preco_sugerido DECIMAL(12,2) NOT NULL,
+    preco_sugerido DECIMAL(12,2) NULL,
     pacote_equipamentos JSON NULL,
     observacao VARCHAR(120) NULL,
 

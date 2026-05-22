@@ -4,7 +4,8 @@ Aplicacao web e API em Python (FastAPI) com:
 - cadastro/login de usuarios
 - autenticacao JWT com payload em Base64
 - cadastro e consulta de veiculos
-- upload de Excel
+- upload simples de Excel
+- processamento estruturado de Excel para alimentar catalogo
 - logs/auditoria conforme schema relacional solicitado
 
 ## Schema de banco (atual)
@@ -46,7 +47,12 @@ Cadastro (`POST /api/v1/veiculos`) grava:
 
 Consulta (`POST /api/v1/veiculos/comparar`) busca por `marca/modelo/versao` e retorna dados tecnicos + metrica mais recente.
 
+Observacao de contrato:
+- `metricas_veiculos.preco_sugerido` permite `NULL` para cenarios de importacao com preco pendente.
+
 ## Upload Excel
+
+### Upload simples
 
 Endpoint: `POST /api/v1/uploads/excel`
 
@@ -56,6 +62,34 @@ Regras:
 - valida MIME e tamanho
 - salva arquivo em `UPLOAD_DIR`
 - registra evento em `logs` apenas quando existe `metrica_veiculo` vinculada ao usuario
+
+### Processamento estruturado (catalogo)
+
+Endpoint: `POST /api/v1/uploads/excel/processar`
+
+Regras:
+- exige Bearer token com perfil `admin` ou `analista`
+- aceita apenas `.xlsx` para parse estruturado
+- exige aba `BASE` com primeira coluna `Equipamentos`
+- trata cada coluna de versao como uma configuracao de veiculo do mesmo modelo
+- executa `upsert` em `marcas -> modelos -> versoes -> veiculos`
+- cria sempre nova linha historica em `metricas_veiculos` (sem sobrescrever snapshots anteriores)
+- registra log por metrica criada com acao `IMPORTACAO_EXCEL_PROCESSADA`
+- fallback de marca: tenta detectar na planilha e, se nao encontrar, usa `FORD`
+
+Resposta de sucesso:
+- `status`
+- `mensagem`
+- `marca`
+- `modelo`
+- `versoes_processadas`
+- `veiculos_criados`
+- `metricas_criadas`
+- `erros_validacao` (lista vazia no sucesso)
+
+Resposta de erro de validacao (`400`):
+- `detail.mensagem`
+- `detail.erros_validacao`
 
 ## Configuracao
 

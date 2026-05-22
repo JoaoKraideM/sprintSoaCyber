@@ -111,3 +111,14 @@ class UploadArquivoResposta(BaseModel):
     caminho_arquivo: str
     nome_arquivo: str
     metrica_id: Optional[int] = None
+
+
+class ProcessamentoExcelResposta(BaseModel):
+    status: str
+    mensagem: str
+    marca: str
+    modelo: str
+    versoes_processadas: int
+    veiculos_criados: int
+    metricas_criadas: int
+    erros_validacao: List[str] = Field(default_factory=list)
