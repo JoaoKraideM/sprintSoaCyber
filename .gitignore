@@ -1,0 +1,26 @@
+# Ambiente local
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Bancos/arquivos temporarios locais
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs de execucao
+*.log
+
+# Uploads gerados em runtime
+data/uploads/*
+!data/uploads/.gitkeep
+
+# Temporarios de testes
+tests/tmp*/
+tests/temp*/

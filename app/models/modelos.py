@@ -147,7 +147,7 @@ class LogModel(AuditColumnsMixin, Base):
     metrica_veiculo_id = Column(
         BIGINT_ID,
         ForeignKey("metricas_veiculos.id", ondelete="RESTRICT", onupdate="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     user_id = Column(BIGINT_ID, ForeignKey("users.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False)
     acao = Column(String(50), nullable=False)

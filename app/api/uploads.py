@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import obter_db, verificar_rbac
 from app.schemas.schemas import ProcessamentoExcelResposta, UploadArquivoResposta
-from app.services.auditoria_service import AuditoriaService
 from app.services.upload_service import ImportacaoExcelError, UploadService
 
 router = APIRouter(prefix="/uploads", tags=["Uploads Excel"])
@@ -29,13 +28,12 @@ async def upload_excel(
             user_agent=user_agent,
         )
     except ValueError as exc:
-        AuditoriaService.registar_evento(
+        UploadService.publicar_falha_upload(
             db,
             user_id=token_data["user_id"],
-            acao="FALHA_UPLOAD_EXCEL",
             ip_origem=ip,
             user_agent=user_agent,
-            dados_depois={"erro": str(exc)},
+            erro=str(exc),
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

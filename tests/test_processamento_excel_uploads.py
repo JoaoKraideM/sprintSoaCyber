@@ -20,6 +20,7 @@ from app.db.session import Base
 from app.models.modelos import LogModel, MarcaModel, MetricaVeiculoModel, ModeloModel, VeiculoModel, VersaoModel
 from app.services.auth_service import AuthService
 from app.services.upload_service import ImportacaoExcelError, UploadService
+from app.services.veiculo_service import VeiculoService
 
 
 class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
@@ -90,6 +91,7 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
         worksheet.append(["Wheels", None, None, None])
         worksheet.append(["Polegadas", 17, 18, 20])
         worksheet.append(["Pneus ATR (50/50)", "X", "X", 0])
+        worksheet.append(["<script>alert(1)</script>Campo XSS", "<img src=x onerror=alert(1)>", "OK", "OK"])
 
         buffer = BytesIO()
         workbook.save(buffer)
@@ -129,12 +131,53 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
             self.assertEqual(db.query(VeiculoModel).count(), 3)
             self.assertEqual(db.query(MetricaVeiculoModel).count(), 3)
             self.assertEqual(db.query(LogModel).filter(LogModel.acao == "IMPORTACAO_EXCEL_PROCESSADA").count(), 3)
+            self.assertEqual(db.query(LogModel).filter(LogModel.acao == "ENVIO_INFORMACOES_EXCEL").count(), 1)
 
             metrica = db.query(MetricaVeiculoModel).first()
             self.assertIsNone(metrica.preco_sugerido)
             self.assertIn("Engine & Transmission", metrica.pacote_equipamentos)
             self.assertIn("Wheels", metrica.pacote_equipamentos)
+            self.assertNotIn("<script>", str(metrica.pacote_equipamentos))
+            self.assertNotIn("<img", str(metrica.pacote_equipamentos))
+
+            log_envio = db.query(LogModel).filter(LogModel.acao == "ENVIO_INFORMACOES_EXCEL").first()
+            self.assertEqual(log_envio.dados_depois["tipo_arquivo"], "datasheet_ford_excel")
+            self.assertEqual(log_envio.dados_depois["nome_arquivo"], "fiap_ford.xlsx")
+            self.assertEqual(log_envio.dados_depois["aba_origem"], "BASE")
+            self.assertEqual(log_envio.dados_depois["status_envio"], "PROCESSADO")
+            self.assertEqual(log_envio.dados_depois["versoes_processadas"], 3)
+            self.assertEqual(log_envio.dados_depois["metricas_criadas"], 3)
             self.assertIn("Potência", metrica.pacote_equipamentos["Engine & Transmission"])
+
+    def test_upload_simples_cria_log_mesmo_sem_metrica(self):
+        caminho_criado = None
+        try:
+            with self.SessionTesting() as db:
+                resultado = asyncio.run(
+                    UploadService.processar_upload_excel(
+                        db=db,
+                        user_id=self.user_user_id,
+                        user_email="user@sistema.local",
+                        arquivo=self._novo_upload_excel(self._gerar_excel_bytes(valido=True)),
+                        ip_origem="127.0.0.1",
+                        user_agent="tests",
+                    )
+                )
+                caminho_criado = Path(resultado["caminho_arquivo"])
+
+                self.assertIsNone(resultado["metrica_id"])
+                self.assertEqual(db.query(LogModel).count(), 1)
+
+                log_envio = db.query(LogModel).filter(LogModel.acao == "ENVIO_INFORMACOES_EXCEL").first()
+                self.assertIsNone(log_envio.metrica_veiculo_id)
+                self.assertEqual(log_envio.dados_depois["nome_arquivo"], "fiap_ford.xlsx")
+                self.assertEqual(log_envio.dados_depois["status_envio"], "ARQUIVO_RECEBIDO")
+        finally:
+            if caminho_criado:
+                try:
+                    caminho_criado.unlink(missing_ok=True)
+                except PermissionError:
+                    pass
 
     def test_reimport_cria_historico_sem_duplicar_veiculo(self):
         arquivo = self._gerar_excel_bytes(valido=True)
@@ -161,6 +204,7 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
             self.assertEqual(db.query(VeiculoModel).count(), 3)
             self.assertEqual(db.query(MetricaVeiculoModel).count(), 6)
             self.assertEqual(db.query(LogModel).filter(LogModel.acao == "IMPORTACAO_EXCEL_PROCESSADA").count(), 6)
+            self.assertEqual(db.query(LogModel).filter(LogModel.acao == "ENVIO_INFORMACOES_EXCEL").count(), 2)
 
     def test_retorna_erro_quando_nao_existe_aba_base(self):
         with self.SessionTesting() as db:
@@ -189,6 +233,28 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
                 validador(authorization=f"Bearer {self.user_token}", db=db)
 
             self.assertEqual(contexto.exception.status_code, 403)
+
+    def test_busca_veiculo_resiste_sql_injection(self):
+        with self.SessionTesting() as db:
+            asyncio.run(
+                UploadService.processar_importacao_excel(
+                    db=db,
+                    user_id=self.admin_user_id,
+                    arquivo=self._novo_upload_excel(self._gerar_excel_bytes(valido=True)),
+                    ip_origem="127.0.0.1",
+                    user_agent="tests",
+                )
+            )
+
+            tentativa = VeiculoService.procurar_veiculo_especifico(
+                db,
+                marca="FORD' OR 1=1 --",
+                modelo="RANGER 26MY",
+                versao="XLT 3.0L V6 AT 26MY",
+            )
+
+            self.assertIsNone(tentativa)
+            self.assertEqual(db.query(VeiculoModel).count(), 3)
 
 
 if __name__ == "__main__":

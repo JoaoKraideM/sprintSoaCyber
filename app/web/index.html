@@ -1,73 +1,198 @@
 <!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Inteligencia Competitiva Automotiva</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css" />
-</head>
-<body>
-  <header class="institucional-header">
-    <div class="header-content">
-      <p class="header-top">Desafio 01</p>
-      <h1>Plataforma de Inteligencia Competitiva Automotiva</h1>
-      <p class="header-sub">Arquitetura SOA + Cybersecurity: cadastro, autenticacao JWT e upload de Excel.</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inteligencia Competitiva Automotiva</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css?v=20260523-form-actions" />
+  </head>
+  <body class="auth-pending">
+    <header class="app-header">
+      <div class="header-content">
+        <div>
+          <p class="header-top">Desafio 01</p>
+          <h1>Plataforma de Inteligencia Competitiva Automotiva</h1>
+          <p class="header-sub">
+            Cadastro, autenticação JWT e upload seguro de Excel em telas
+            separadas.
+          </p>
+        </div>
+
+        <div class="header-actions">
+          <div class="session-chip" aria-live="polite">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="token-status">Sem token ativo.</span>
+          </div>
+          <button
+            class="header-logout-btn"
+            id="nav-logout-btn"
+            type="button"
+            data-auth-state="authenticated"
+            hidden
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="content-container">
+      <nav class="screen-nav" aria-label="Navegacao principal">
+        <a
+          class="nav-btn {{upload_nav_active}}"
+          href="/enviar-arquivo"
+          data-screen-target="upload"
+          data-auth-required="true"
+          data-auth-state="authenticated"
+          hidden
+          >Enviar arquivo</a
+        >
+      </nav>
+
+      <main class="screen-shell">
+        <section
+          class="screen {{login_screen_active}}"
+          id="screen-login"
+          aria-labelledby="login-title"
+          {{login_screen_hidden}}
+        >
+          <div class="screen-copy">
+            <p class="eyebrow">Acesso</p>
+            <h2 id="login-title">Entre para continuar</h2>
+            <p>
+              Use seu e-mail e senha cadastrados para liberar a tela de envio de
+              arquivos.
+            </p>
+          </div>
+
+          <div class="panel">
+            <form id="form-login">
+              <label for="login-email">Email</label>
+              <input
+                id="login-email"
+                type="email"
+                required
+                maxlength="120"
+                autocomplete="email"
+              />
+
+              <label for="login-password">Senha</label>
+              <input
+                id="login-password"
+                type="password"
+                required
+                minlength="8"
+                maxlength="120"
+                autocomplete="current-password"
+              />
+
+              <div class="form-actions">
+                <button type="submit">Entrar</button>
+                <a
+                  class="link-button"
+                  href="/registro"
+                  data-screen-target="registro"
+                  >Criar conta</a
+                >
+              </div>
+            </form>
+            <p class="feedback" id="login-feedback" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section
+          class="screen {{registro_screen_active}}"
+          id="screen-registro"
+          aria-labelledby="registro-title"
+          {{registro_screen_hidden}}
+        >
+          <div class="screen-copy">
+            <p class="eyebrow">Novo usuário</p>
+            <h2 id="registro-title">Crie sua conta</h2>
+            <p>
+              O cadastro público cria perfil de usuario e pode ser usado em
+              seguida no login.
+            </p>
+          </div>
+
+          <div class="panel">
+            <form id="form-register">
+              <label for="register-nome">Nome</label>
+              <input
+                id="register-nome"
+                type="text"
+                maxlength="120"
+                autocomplete="name"
+              />
+
+              <label for="register-email">Email</label>
+              <input
+                id="register-email"
+                type="email"
+                required
+                maxlength="120"
+                autocomplete="email"
+              />
+
+              <label for="register-password">Senha</label>
+              <input
+                id="register-password"
+                type="password"
+                required
+                minlength="8"
+                maxlength="120"
+                autocomplete="new-password"
+              />
+
+              <div class="form-actions">
+                <button type="submit">Cadastrar</button>
+                <a class="link-button" href="/login" data-screen-target="login"
+                  >Ja tenho conta</a
+                >
+              </div>
+            </form>
+            <p class="feedback" id="register-feedback" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section
+          class="screen {{upload_screen_active}}"
+          id="screen-upload"
+          aria-labelledby="upload-title"
+          {{upload_screen_hidden}}
+        >
+          <div class="screen-copy">
+            <p class="eyebrow">Upload</p>
+            <h2 id="upload-title">Envie o arquivo Excel</h2>
+            <p>
+              Selecione um arquivo .xlsx ou .xls para enviar com autenticação
+              JWT ativa.
+            </p>
+          </div>
+
+          <div class="panel">
+            <form id="form-upload">
+              <label for="arquivo-excel">Arquivo Excel</label>
+              <input
+                id="arquivo-excel"
+                type="file"
+                accept=".xlsx,.xls"
+                required
+              />
+              <button type="submit">Enviar arquivo</button>
+            </form>
+            <p class="feedback" id="upload-feedback" aria-live="polite"></p>
+          </div>
+        </section>
+      </main>
     </div>
-  </header>
 
-  <main class="layout">
-    <section class="card">
-      <h2>Criar Usuario</h2>
-      <form id="form-register">
-        <label for="register-nome">Nome</label>
-        <input id="register-nome" type="text" maxlength="120" />
-
-        <label for="register-email">Email</label>
-        <input id="register-email" type="email" required maxlength="120" />
-
-        <label for="register-password">Senha</label>
-        <input id="register-password" type="password" required minlength="8" maxlength="120" />
-
-        <button type="submit">Cadastrar</button>
-      </form>
-      <p class="feedback" id="register-feedback"></p>
-    </section>
-
-    <section class="card">
-      <h2>Login</h2>
-      <form id="form-login">
-        <label for="login-email">Email</label>
-        <input id="login-email" type="email" required maxlength="120" />
-
-        <label for="login-password">Senha</label>
-        <input id="login-password" type="password" required minlength="8" maxlength="120" />
-
-        <button type="submit">Entrar</button>
-      </form>
-      <p class="feedback" id="login-feedback"></p>
-    </section>
-
-    <section class="card card-upload">
-      <h2>Envio de Excel</h2>
-      <p class="helper">Somente .xlsx ou .xls, com validacao de tipo, tamanho e autenticacao.</p>
-      <form id="form-upload">
-        <label for="arquivo-excel">Arquivo Excel</label>
-        <input id="arquivo-excel" type="file" accept=".xlsx,.xls" required />
-        <button type="submit">Enviar arquivo</button>
-      </form>
-      <p class="feedback" id="upload-feedback"></p>
-    </section>
-  </main>
-
-  <section class="token-area">
-    <h3>Estado de autenticacao</h3>
-    <p id="token-status">Sem token ativo.</p>
-    <button id="logout-btn" type="button">Limpar sessao</button>
-  </section>
-
-  <script src="/static/app.js" defer></script>
-</body>
+    <script src="/static/app.js?v=20260523-form-actions" defer></script>
+  </body>
 </html>

@@ -12,6 +12,7 @@ from app.core.security import (
     gerar_fingerprint_hash,
     gerar_hash_credencial,
     normalizar_email,
+    sanitizar_string,
     verificar_hash_credencial,
 )
 from app.models.modelos import LogAuthModel, UserModel
@@ -39,7 +40,7 @@ class AuthService:
         if existente:
             raise ValueError("Utilizador ja cadastrado.")
 
-        nome_final = (nome or "").strip() or email_normalizado.split("@")[0]
+        nome_final = sanitizar_string(nome or "") or email_normalizado.split("@")[0]
 
         novo = UserModel(
             nome=nome_final,

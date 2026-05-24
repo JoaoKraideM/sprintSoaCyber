@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -132,3 +133,87 @@ class VeiculoService:
         db.refresh(metrica)
 
         return novo, metrica
+
+    @staticmethod
+    def importar_registros_excel(
+        db: Session,
+        user_id: int,
+        marca: str,
+        modelo: str,
+        registros: list[dict[str, Any]],
+        observacao: str,
+    ) -> dict:
+        metricas_criadas = 0
+        veiculos_criados = 0
+        primeira_metrica_id = None
+        versoes_importadas = []
+        itens_importados = []
+
+        try:
+            for registro in registros:
+                _, _, versao_db = VeiculoService._obter_ou_criar_modelo_versao(
+                    db=db,
+                    marca=marca,
+                    modelo=modelo,
+                    versao=registro["versao"],
+                )
+
+                veiculo = (
+                    db.query(VeiculoModel)
+                    .filter(
+                        VeiculoModel.versao_id == versao_db.id,
+                        VeiculoModel.motorizacao == registro["motorizacao"],
+                        VeiculoModel.potencia_cv == registro["potencia_cv"],
+                        VeiculoModel.transmissao == registro["transmissao"],
+                        VeiculoModel.tracao == registro["tracao"],
+                        VeiculoModel.status.is_(True),
+                    )
+                    .first()
+                )
+
+                if not veiculo:
+                    veiculo = VeiculoModel(
+                        versao_id=versao_db.id,
+                        motorizacao=registro["motorizacao"],
+                        potencia_cv=registro["potencia_cv"],
+                        transmissao=registro["transmissao"],
+                        tracao=registro["tracao"],
+                        status=True,
+                    )
+                    db.add(veiculo)
+                    db.flush()
+                    veiculos_criados += 1
+
+                metrica = MetricaVeiculoModel(
+                    veiculo_id=veiculo.id,
+                    user_id=user_id,
+                    preco_sugerido=None,
+                    pacote_equipamentos=registro["pacote_equipamentos"],
+                    observacao=observacao,
+                )
+                db.add(metrica)
+                db.flush()
+
+                primeira_metrica_id = primeira_metrica_id or metrica.id
+                versoes_importadas.append(registro["versao"])
+                metricas_criadas += 1
+                itens_importados.append(
+                    {
+                        "versao": registro["versao"],
+                        "veiculo_id": veiculo.id,
+                        "metrica_id": metrica.id,
+                    }
+                )
+
+            db.commit()
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            raise
+
+        return {
+            "primeira_metrica_id": primeira_metrica_id,
+            "versoes_importadas": versoes_importadas,
+            "itens_importados": itens_importados,
+            "veiculos_criados": veiculos_criados,
+            "metricas_criadas": metricas_criadas,
+        }
