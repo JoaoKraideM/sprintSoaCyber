@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import obter_db
 from app.core.config import settings
 from app.schemas.schemas import CadastroUsuarioInput, LoginInput
-from app.services.auditoria_service import AuditoriaService
 from app.services.auth_service import AuthService
+from app.services.event_bus import EventBus, EventoDominio
 
 router = APIRouter(prefix="/auth", tags=["Autenticacao Centralizada"])
 
@@ -31,13 +31,15 @@ def cadastrar_utilizador(dados: CadastroUsuarioInput, request: Request, db: Sess
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    AuditoriaService.registar_evento(
+    EventBus.publicar(
         db,
-        user_id=user.id,
-        acao="SUCESSO_CADASTRO",
-        ip_origem=ip,
-        user_agent=user_agent,
-        dados_depois={"email": user.email, "role": user.role},
+        EventoDominio(
+            nome="SUCESSO_CADASTRO",
+            user_id=user.id,
+            ip_origem=ip,
+            user_agent=user_agent,
+            dados_depois={"email": user.email, "role": user.role},
+        ),
     )
 
     return {
@@ -67,13 +69,15 @@ def efetuar_login(dados: LoginInput, request: Request, db: Session = Depends(obt
             status=False,
         )
         if user_existente:
-            AuditoriaService.registar_evento(
+            EventBus.publicar(
                 db,
-                user_id=user_existente.id,
-                acao="FALHA_AUTENTICACAO",
-                ip_origem=ip,
-                user_agent=user_agent,
-                dados_depois={"email": email_login},
+                EventoDominio(
+                    nome="FALHA_AUTENTICACAO",
+                    user_id=user_existente.id,
+                    ip_origem=ip,
+                    user_agent=user_agent,
+                    dados_depois={"email": email_login},
+                ),
             )
 
         raise HTTPException(
@@ -95,13 +99,15 @@ def efetuar_login(dados: LoginInput, request: Request, db: Session = Depends(obt
         expires_at=expires_at,
     )
 
-    AuditoriaService.registar_evento(
+    EventBus.publicar(
         db,
-        user_id=user.id,
-        acao="SUCESSO_AUTENTICACAO",
-        ip_origem=ip,
-        user_agent=user_agent,
-        dados_depois={"email": user.email, "role": user.role},
+        EventoDominio(
+            nome="SUCESSO_AUTENTICACAO",
+            user_id=user.id,
+            ip_origem=ip,
+            user_agent=user_agent,
+            dados_depois={"email": user.email, "role": user.role},
+        ),
     )
 
     return {

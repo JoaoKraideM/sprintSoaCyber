@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import obter_db, verificar_rbac
 from app.schemas.schemas import CadastroVeiculoInput, ConsultaVeiculoInput
-from app.services.auditoria_service import AuditoriaService
+from app.services.event_bus import EventBus, EventoDominio
 from app.services.veiculo_service import VeiculoService
 
 router = APIRouter(prefix="/veiculos", tags=["Catalogo e Inteligencia Automotiva"])
@@ -21,13 +21,15 @@ def comparar_veiculos(
     resposta = VeiculoService.processar_analise_competitiva(db, payload)
 
     if token_data["role"] == "analista":
-        AuditoriaService.registar_evento(
+        EventBus.publicar(
             db,
-            user_id=token_data["user_id"],
-            acao="EXTRACAO_COMPETITIVA",
-            ip_origem=ip,
-            user_agent=request.headers.get("user-agent"),
-            dados_depois={"marca": payload.marca, "modelo": payload.modelo, "versao": payload.versao},
+            EventoDominio(
+                nome="EXTRACAO_COMPETITIVA",
+                user_id=token_data["user_id"],
+                ip_origem=ip,
+                user_agent=request.headers.get("user-agent"),
+                dados_depois={"marca": payload.marca, "modelo": payload.modelo, "versao": payload.versao},
+            ),
         )
 
     return resposta
@@ -48,19 +50,21 @@ def cadastrar_veiculo(
 
     veiculo_salvo, metrica = VeiculoService.registar_novo_veiculo(db, payload, token_data["user_id"])
 
-    AuditoriaService.registar_evento(
+    EventBus.publicar(
         db,
-        user_id=token_data["user_id"],
-        metrica_veiculo_id=metrica.id if metrica else None,
-        acao="CADASTRO_VEICULO",
-        ip_origem=ip,
-        user_agent=request.headers.get("user-agent"),
-        dados_depois={
-            "veiculo_id": veiculo_salvo.id,
-            "marca": payload.marca,
-            "modelo": payload.modelo,
-            "versao": payload.versao,
-        },
+        EventoDominio(
+            nome="CADASTRO_VEICULO",
+            user_id=token_data["user_id"],
+            metrica_veiculo_id=metrica.id if metrica else None,
+            ip_origem=ip,
+            user_agent=request.headers.get("user-agent"),
+            dados_depois={
+                "veiculo_id": veiculo_salvo.id,
+                "marca": payload.marca,
+                "modelo": payload.modelo,
+                "versao": payload.versao,
+            },
+        ),
     )
 
     return {"status": "sucesso", "id": veiculo_salvo.id, "metrica_id": metrica.id if metrica else None}

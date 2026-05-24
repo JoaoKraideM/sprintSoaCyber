@@ -2,26 +2,12 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.models.modelos import LogModel, MetricaVeiculoModel
+from app.models.modelos import LogModel
 
 logger = logging.getLogger("AuditoriaService")
 
 
 class AuditoriaService:
-    @staticmethod
-    def _obter_metrica_existente(db: Session, user_id: int) -> int | None:
-        metrica = (
-            db.query(MetricaVeiculoModel)
-            .filter(MetricaVeiculoModel.user_id == user_id)
-            .order_by(
-                MetricaVeiculoModel.create_date.desc(),
-                MetricaVeiculoModel.hour_date.desc(),
-                MetricaVeiculoModel.id.desc(),
-            )
-            .first()
-        )
-        return metrica.id if metrica else None
-
     @staticmethod
     def registar_evento(
         db: Session,
@@ -33,18 +19,9 @@ class AuditoriaService:
         dados_antes: dict | None = None,
         dados_depois: dict | None = None,
     ):
-        """Registra eventos na tabela logs sem criar dados auxiliares no banco."""
-        metrica_id = metrica_veiculo_id or AuditoriaService._obter_metrica_existente(db, user_id)
-        if not metrica_id:
-            logger.info(
-                "[AUDITORIA] evento ignorado por falta de metrica vinculada: user_id=%s acao=%s",
-                user_id,
-                acao,
-            )
-            return
-
+        """Registra eventos sem depender do dominio de metricas."""
         log = LogModel(
-            metrica_veiculo_id=metrica_id,
+            metrica_veiculo_id=metrica_veiculo_id,
             user_id=user_id,
             acao=(acao or "ACAO")[0:50],
             dados_antes=dados_antes,

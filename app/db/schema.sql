@@ -152,7 +152,7 @@ CREATE TABLE metricas_veiculos (
 CREATE TABLE logs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
-    metrica_veiculo_id BIGINT UNSIGNED NOT NULL,
+    metrica_veiculo_id BIGINT UNSIGNED NULL,
     user_id BIGINT UNSIGNED NOT NULL,
 
     acao VARCHAR(50) NOT NULL,

@@ -10,14 +10,9 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.modelos import (
-    LogModel,
-    MarcaModel,
-    MetricaVeiculoModel,
-    ModeloModel,
-    VeiculoModel,
-    VersaoModel,
-)
+from app.core.security import sanitizar_string
+from app.services.event_bus import EventBus, EventoDominio
+from app.services.veiculo_service import VeiculoService
 
 _FILENAME_REGEX = re.compile(r"[^A-Za-z0-9._-]")
 _COLUNA_REGEX = re.compile(r"^coluna\d+$", re.IGNORECASE)
@@ -104,25 +99,11 @@ class UploadService:
         return nome_original, extensao, conteudo, tamanho
 
     @staticmethod
-    def _obter_metrica_para_log(db: Session, user_id: int) -> int | None:
-        metrica = (
-            db.query(MetricaVeiculoModel)
-            .filter(MetricaVeiculoModel.user_id == user_id)
-            .order_by(
-                MetricaVeiculoModel.create_date.desc(),
-                MetricaVeiculoModel.hour_date.desc(),
-                MetricaVeiculoModel.id.desc(),
-            )
-            .first()
-        )
-        return metrica.id if metrica else None
-
-    @staticmethod
     def _normalizar_texto(valor: Any) -> str:
         if valor is None:
             return ""
         if isinstance(valor, str):
-            texto = valor.strip()
+            texto = sanitizar_string(valor)
             return "" if texto.lower() == "nan" else texto
         if isinstance(valor, (int, bool)):
             return str(valor)
@@ -262,28 +243,6 @@ class UploadService:
         return "Nao informado"
 
     @staticmethod
-    def _obter_ou_criar_catalogo(db: Session, marca: str, modelo: str, versao: str) -> tuple[MarcaModel, ModeloModel, VersaoModel]:
-        marca_db = db.query(MarcaModel).filter(MarcaModel.nome == marca).first()
-        if not marca_db:
-            marca_db = MarcaModel(nome=marca)
-            db.add(marca_db)
-            db.flush()
-
-        modelo_db = db.query(ModeloModel).filter(ModeloModel.marca_id == marca_db.id, ModeloModel.nome == modelo).first()
-        if not modelo_db:
-            modelo_db = ModeloModel(marca_id=marca_db.id, nome=modelo)
-            db.add(modelo_db)
-            db.flush()
-
-        versao_db = db.query(VersaoModel).filter(VersaoModel.modelo_id == modelo_db.id, VersaoModel.nome == versao).first()
-        if not versao_db:
-            versao_db = VersaoModel(modelo_id=modelo_db.id, nome=versao)
-            db.add(versao_db)
-            db.flush()
-
-        return marca_db, modelo_db, versao_db
-
-    @staticmethod
     def _parse_planilha_importacao(conteudo: bytes) -> tuple[str, str, list[dict[str, Any]]]:
         erros_validacao: list[str] = []
         try:
@@ -405,35 +364,53 @@ class UploadService:
         caminho_arquivo = upload_dir / nome_armazenado
         caminho_arquivo.write_bytes(conteudo)
 
-        metrica_id = UploadService._obter_metrica_para_log(db, user_id)
-
-        if metrica_id:
-            log = LogModel(
-                metrica_veiculo_id=metrica_id,
+        EventBus.publicar(
+            db,
+            EventoDominio(
+                nome="ENVIO_INFORMACOES_EXCEL",
                 user_id=user_id,
-                acao="UPLOAD_EXCEL",
-                dados_antes=None,
+                ip_origem=ip_origem,
+                user_agent=user_agent,
                 dados_depois={
                     "email": user_email,
+                    "tipo_arquivo": "excel",
+                    "nome_arquivo": nome_original,
                     "nome_original": nome_original,
                     "nome_armazenado": nome_armazenado,
                     "caminho_armazenado": str(caminho_arquivo),
                     "tamanho_bytes": tamanho,
                     "mime_type": arquivo.content_type or "application/octet-stream",
+                    "status_envio": "ARQUIVO_RECEBIDO",
                 },
-                ip=ip_origem,
-                user_agent=(user_agent or "")[0:255] or None,
-            )
-            db.add(log)
-            db.commit()
+            ),
+        )
 
         return {
             "status": "sucesso",
             "mensagem": "Upload realizado com sucesso.",
             "caminho_arquivo": str(caminho_arquivo),
             "nome_arquivo": nome_original,
-            "metrica_id": metrica_id,
+            "metrica_id": None,
         }
+
+    @staticmethod
+    def publicar_falha_upload(
+        db: Session,
+        user_id: int,
+        erro: str,
+        ip_origem: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        EventBus.publicar(
+            db,
+            EventoDominio(
+                nome="FALHA_UPLOAD_EXCEL",
+                user_id=user_id,
+                ip_origem=ip_origem,
+                user_agent=user_agent,
+                dados_depois={"erro": erro},
+            ),
+        )
 
     @staticmethod
     async def processar_importacao_excel(
@@ -443,7 +420,7 @@ class UploadService:
         ip_origem: str | None = None,
         user_agent: str | None = None,
     ) -> dict:
-        nome_original, extensao, conteudo, _ = await UploadService._ler_e_validar_upload(arquivo)
+        nome_original, extensao, conteudo, tamanho = await UploadService._ler_e_validar_upload(arquivo)
         if extensao != ".xlsx":
             raise ImportacaoExcelError(
                 "Formato nao suportado para importacao estruturada.",
@@ -456,77 +433,60 @@ class UploadService:
             f"Importacao Excel: {nome_original} em {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"
         )[:120]
 
-        metricas_criadas = 0
-        veiculos_criados = 0
+        resultado_catalogo = VeiculoService.importar_registros_excel(
+            db=db,
+            user_id=user_id,
+            marca=marca,
+            modelo=modelo,
+            registros=registros,
+            observacao=observacao,
+        )
 
-        try:
-            for registro in registros:
-                _, _, versao_db = UploadService._obter_ou_criar_catalogo(
-                    db=db,
-                    marca=marca,
-                    modelo=modelo,
-                    versao=registro["versao"],
-                )
-
-                veiculo = (
-                    db.query(VeiculoModel)
-                    .filter(
-                        VeiculoModel.versao_id == versao_db.id,
-                        VeiculoModel.motorizacao == registro["motorizacao"],
-                        VeiculoModel.potencia_cv == registro["potencia_cv"],
-                        VeiculoModel.transmissao == registro["transmissao"],
-                        VeiculoModel.tracao == registro["tracao"],
-                        VeiculoModel.status.is_(True),
-                    )
-                    .first()
-                )
-
-                if not veiculo:
-                    veiculo = VeiculoModel(
-                        versao_id=versao_db.id,
-                        motorizacao=registro["motorizacao"],
-                        potencia_cv=registro["potencia_cv"],
-                        transmissao=registro["transmissao"],
-                        tracao=registro["tracao"],
-                        status=True,
-                    )
-                    db.add(veiculo)
-                    db.flush()
-                    veiculos_criados += 1
-
-                metrica = MetricaVeiculoModel(
-                    veiculo_id=veiculo.id,
+        for item in resultado_catalogo["itens_importados"]:
+            EventBus.publicar(
+                db,
+                EventoDominio(
+                    nome="IMPORTACAO_EXCEL_PROCESSADA",
                     user_id=user_id,
-                    preco_sugerido=None,
-                    pacote_equipamentos=registro["pacote_equipamentos"],
-                    observacao=observacao,
-                )
-                db.add(metrica)
-                db.flush()
-                metricas_criadas += 1
+                    metrica_veiculo_id=item["metrica_id"],
+                    ip_origem=ip_origem,
+                    user_agent=user_agent,
+                    dados_depois={
+                        "nome_arquivo": nome_original,
+                        "marca": marca,
+                        "modelo": modelo,
+                        "versao": item["versao"],
+                        "veiculo_id": item["veiculo_id"],
+                        "metrica_id": item["metrica_id"],
+                    },
+                ),
+            )
 
-                db.add(
-                    LogModel(
-                        metrica_veiculo_id=metrica.id,
-                        user_id=user_id,
-                        acao="IMPORTACAO_EXCEL_PROCESSADA",
-                        dados_depois={
-                            "nome_arquivo": nome_original,
-                            "marca": marca,
-                            "modelo": modelo,
-                            "versao": registro["versao"],
-                            "veiculo_id": veiculo.id,
-                            "metrica_id": metrica.id,
-                        },
-                        ip=ip_origem,
-                        user_agent=(user_agent or "")[0:255] or None,
-                    )
-                )
-
-            db.commit()
-        except Exception:  # noqa: BLE001
-            db.rollback()
-            raise
+        if resultado_catalogo["primeira_metrica_id"]:
+            EventBus.publicar(
+                db,
+                EventoDominio(
+                    nome="ENVIO_INFORMACOES_EXCEL",
+                    user_id=user_id,
+                    metrica_veiculo_id=resultado_catalogo["primeira_metrica_id"],
+                    ip_origem=ip_origem,
+                    user_agent=user_agent,
+                    dados_depois={
+                        "tipo_arquivo": "datasheet_ford_excel",
+                        "nome_arquivo": nome_original,
+                        "mime_type": arquivo.content_type or "application/octet-stream",
+                        "tamanho_bytes": tamanho,
+                        "aba_origem": "BASE",
+                        "status_envio": "PROCESSADO",
+                        "marca": marca,
+                        "modelo": modelo,
+                        "versoes_processadas": len(registros),
+                        "versoes": resultado_catalogo["versoes_importadas"],
+                        "veiculos_criados": resultado_catalogo["veiculos_criados"],
+                        "metricas_criadas": resultado_catalogo["metricas_criadas"],
+                    },
+                ),
+            )
 
         return {
             "status": "sucesso",
@@ -534,7 +494,7 @@ class UploadService:
             "marca": marca,
             "modelo": modelo,
             "versoes_processadas": len(registros),
-            "veiculos_criados": veiculos_criados,
-            "metricas_criadas": metricas_criadas,
+            "veiculos_criados": resultado_catalogo["veiculos_criados"],
+            "metricas_criadas": resultado_catalogo["metricas_criadas"],
             "erros_validacao": [],
         }
