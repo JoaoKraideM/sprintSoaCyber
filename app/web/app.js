@@ -22,8 +22,6 @@ const navLogoutBtn = document.getElementById("nav-logout-btn");
 const registerFeedback = document.getElementById("register-feedback");
 const loginFeedback = document.getElementById("login-feedback");
 const uploadFeedback = document.getElementById("upload-feedback");
-const tokenStatus = document.getElementById("token-status");
-const statusDot = document.getElementById("status-dot");
 const routeLinks = document.querySelectorAll("[data-screen-target]");
 const navButtons = document.querySelectorAll(".screen-nav [data-screen-target]");
 const authStateItems = document.querySelectorAll("[data-auth-state]");
@@ -58,8 +56,6 @@ function limparFeedbacks() {
 function atualizarStatusToken() {
   const token = tokenAtual();
   const autenticado = Boolean(token);
-  tokenStatus.textContent = token ? "Token JWT ativo." : "Sem token ativo.";
-  statusDot.classList.toggle("online", autenticado);
 
   if (autenticado) {
     salvarCookieSessao(token);
@@ -231,7 +227,6 @@ function efetuarLogout() {
   removerCookieSessao();
   atualizarStatusToken();
   ativarTela("login", true, true);
-  setFeedback(loginFeedback, "Sessao removida.", "ok");
 }
 
 navLogoutBtn.addEventListener("click", () => {

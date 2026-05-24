@@ -1,15 +1,18 @@
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.deps import obter_db
 from app.api.uploads import router as uploads_router
 from app.api.veiculos import router as veiculos_router
+from app.core.config import settings
 from app.core.middleware import seguranca_middleware_global
 from app.db.session import engine
 from app.services.auth_service import AuthService
@@ -20,11 +23,20 @@ app = FastAPI(
     version="3.1.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "X-Payload-Signature", "X-Payload-Timestamp"],
+)
+
 app.middleware("http")(seguranca_middleware_global)
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(veiculos_router, prefix="/api/v1")
 app.include_router(uploads_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
 
 _web_dir = Path(__file__).resolve().parent / "web"
 _session_cookie_name = "ica_access_token"

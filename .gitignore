@@ -17,6 +17,9 @@ __pycache__/
 # Logs de execucao
 *.log
 
+# Certificados e chaves locais
+certs/*.pem
+
 # Uploads gerados em runtime
 data/uploads/*
 !data/uploads/.gitkeep

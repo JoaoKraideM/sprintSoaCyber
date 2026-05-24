@@ -3,32 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Inteligencia Competitiva Automotiva</title>
+    <title>VAnalytics</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=20260523-form-actions" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260524-layout-polish" />
   </head>
   <body class="auth-pending">
     <header class="app-header">
       <div class="header-content">
-        <div>
-          <p class="header-top">Desafio 01</p>
-          <h1>Plataforma de Inteligencia Competitiva Automotiva</h1>
-          <p class="header-sub">
-            Cadastro, autenticação JWT e upload seguro de Excel em telas
-            separadas.
-          </p>
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">VA</span>
+          <h1 class="app-title">VAnalytics</h1>
         </div>
 
         <div class="header-actions">
-          <div class="session-chip" aria-live="polite">
-            <span class="status-dot" id="status-dot"></span>
-            <span id="token-status">Sem token ativo.</span>
-          </div>
           <button
             class="header-logout-btn"
             id="nav-logout-btn"
@@ -43,18 +35,6 @@
     </header>
 
     <div class="content-container">
-      <nav class="screen-nav" aria-label="Navegacao principal">
-        <a
-          class="nav-btn {{upload_nav_active}}"
-          href="/enviar-arquivo"
-          data-screen-target="upload"
-          data-auth-required="true"
-          data-auth-state="authenticated"
-          hidden
-          >Enviar arquivo</a
-        >
-      </nav>
-
       <main class="screen-shell">
         <section
           class="screen {{login_screen_active}}"
@@ -113,10 +93,10 @@
           {{registro_screen_hidden}}
         >
           <div class="screen-copy">
-            <p class="eyebrow">Novo usuário</p>
+            <p class="eyebrow">Novo usuario</p>
             <h2 id="registro-title">Crie sua conta</h2>
             <p>
-              O cadastro público cria perfil de usuario e pode ser usado em
+              O cadastro publico cria perfil de usuario e pode ser usado em
               seguida no login.
             </p>
           </div>
@@ -171,7 +151,7 @@
             <p class="eyebrow">Upload</p>
             <h2 id="upload-title">Envie o arquivo Excel</h2>
             <p>
-              Selecione um arquivo .xlsx ou .xls para enviar com autenticação
+              Selecione um arquivo .xlsx ou .xls para enviar com autenticacao
               JWT ativa.
             </p>
           </div>
@@ -193,6 +173,6 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=20260523-form-actions" defer></script>
+    <script src="/static/app.js?v=20260524-layout-polish" defer></script>
   </body>
 </html>
