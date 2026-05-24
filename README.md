@@ -1,5 +1,11 @@
-# Projeto Base - Sistema Veículos (SOA + Cyber)
+#MEMBROS
+- Douglas dos Santos Melo RM556439 
+- Henrique Sanches RM557959
+- João Pedro Kraide Máximo RM563166
+- Matheus Marcelino Dantas da Silva RM556332
+- Nicolas Caciolato reis RM556506
 
+# Projeto Base - Sistema Veículos (SOA + Cyber)
 Aplicação web e API em Python (FastAPI) com:
 - cadastro/login de usuários
 - autenticação JWT com payload em Base64
