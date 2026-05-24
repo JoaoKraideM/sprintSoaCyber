@@ -8,6 +8,7 @@ from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.privacy import sanitizar_para_auditoria
 from app.core.security import (
     gerar_fingerprint_hash,
     gerar_hash_credencial,
@@ -153,9 +154,9 @@ class AuthService:
     ) -> LogAuthModel:
         log_auth = LogAuthModel(
             user_id=user_id,
-            address=(address or "")[:100] or None,
-            ip=(ip or "")[:45] or None,
-            user_agent=(user_agent or "")[:255] or None,
+            address=sanitizar_para_auditoria((address or "")[:100], "address") or None,
+            ip=sanitizar_para_auditoria((ip or "")[:45], "ip") or None,
+            user_agent=sanitizar_para_auditoria((user_agent or "")[:255], "user_agent") or None,
             status=bool(status),
             expires_at=expires_at,
         )

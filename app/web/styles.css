@@ -24,7 +24,11 @@ body {
   min-height: 100vh;
   color: var(--ink);
   font-family: "Space Grotesk", sans-serif;
-  background: linear-gradient(180deg, #0f141b 0%, var(--bg) 42%, #0d1014 100%);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(180deg, #0f141b 0%, var(--bg) 42%, #0d1014 100%);
+  background-size: 42px 42px, 42px 42px, auto;
 }
 
 a {
@@ -38,17 +42,38 @@ a {
 
 .app-header {
   border-bottom: 1px solid var(--line);
-  background: #151b22;
+  background: rgba(21, 27, 34, 0.94);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.18);
 }
 
 .header-content {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 24px 20px;
+  padding: 14px 20px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
+}
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(34, 199, 184, 0.68);
+  border-radius: 8px;
+  color: var(--accent);
+  background: #102421;
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .header-actions {
@@ -62,10 +87,13 @@ a {
 .content-container {
   max-width: 1140px;
   margin: 24px auto 44px;
-  padding: 24px 30px 34px;
+  padding: 30px 34px 38px;
   border: 1px solid rgba(52, 67, 83, 0.72);
   border-radius: 8px;
-  background: rgba(13, 18, 24, 0.66);
+  background:
+    linear-gradient(135deg, rgba(34, 199, 184, 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(85, 217, 111, 0.06), transparent 34%),
+    rgba(13, 18, 24, 0.78);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
 }
 
@@ -85,9 +113,13 @@ h2 {
 }
 
 h1 {
-  margin: 6px 0;
+  margin: 0;
   line-height: 1.1;
   font-size: clamp(1.55rem, 3vw, 2.35rem);
+}
+
+.app-title {
+  color: var(--ink);
 }
 
 h2 {
@@ -105,30 +137,6 @@ h2 {
 .header-sub,
 .screen-copy p {
   margin: 0;
-}
-
-.session-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: var(--ink-muted);
-  background: var(--surface);
-  font-size: 0.92rem;
-}
-
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--warning);
-}
-
-.status-dot.online {
-  background: var(--accent-strong);
 }
 
 .screen-nav {
@@ -186,17 +194,29 @@ button {
 }
 
 .screen-shell {
-  width: 80%;
+  width: min(100%, 980px);
   margin: 0 auto;
   padding: 0;
 }
 
 .screen {
-  min-height: 510px;
+  position: relative;
+  min-height: 560px;
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 420px);
+  grid-template-columns: minmax(280px, 0.95fr) minmax(340px, 440px);
   align-items: center;
-  gap: 36px;
+  gap: 48px;
+}
+
+.screen::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 84px;
+  bottom: 84px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), transparent);
 }
 
 .screen[hidden] {
@@ -205,13 +225,23 @@ button {
 
 .screen-copy {
   max-width: 560px;
+  padding: 20px 0;
+}
+
+.screen-copy::after {
+  content: "";
+  display: block;
+  width: min(280px, 72%);
+  height: 1px;
+  margin-top: 26px;
+  background: linear-gradient(90deg, var(--accent), transparent);
 }
 
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 22px;
-  background: var(--surface);
+  padding: 26px;
+  background: rgba(23, 29, 36, 0.96);
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
 }
 
@@ -324,7 +354,6 @@ button:hover {
   .header-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
-    margin-top: 16px;
   }
 
   .screen-nav {
@@ -346,6 +375,10 @@ button:hover {
 
   .screen {
     min-height: auto;
+  }
+
+  .screen::before {
+    display: none;
   }
 
   .screen-copy {

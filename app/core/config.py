@@ -17,6 +17,13 @@ def _ler_int(nome: str, padrao: int) -> int:
         return padrao
 
 
+def _ler_bool(nome: str, padrao: bool = False) -> bool:
+    valor = os.getenv(nome)
+    if valor is None:
+        return padrao
+    return valor.strip().lower() in {"1", "true", "sim", "yes", "on"}
+
+
 def _ler_lista(nome: str, padrao: list[str]) -> list[str]:
     valor = os.getenv(nome)
     if not valor:
@@ -47,12 +54,28 @@ def _montar_database_url() -> str:
 class Settings:
     SERVER_HOST: str = os.getenv("SERVER_HOST", "127.0.0.1")
     SERVER_PORT: int = _ler_int("SERVER_PORT", 8000)
+    APP_ENV: str = os.getenv("APP_ENV", "development")
 
     SECRET_KEY: str = os.getenv("SECRET_KEY", "ChavePadraoDeSegurancaParaDesenvolvimento2026")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = _ler_int("ACCESS_TOKEN_EXPIRE_MINUTES", 30)
     PAYLOAD_SECRET_HMAC: bytes = os.getenv("PAYLOAD_SECRET_HMAC", "IntegrityKeyDefault").encode()
+    DATA_ENCRYPTION_KEY: str = os.getenv("DATA_ENCRYPTION_KEY", "")
+    ENCRYPT_UPLOADS_AT_REST: bool = _ler_bool("ENCRYPT_UPLOADS_AT_REST", True)
+    REQUIRE_PAYLOAD_SIGNATURE: bool = _ler_bool("REQUIRE_PAYLOAD_SIGNATURE", False)
+    PAYLOAD_SIGNATURE_EXEMPT_PATHS: list[str] = _ler_lista(
+        "PAYLOAD_SIGNATURE_EXEMPT_PATHS",
+        ["/api/v1/auth/register", "/api/v1/auth/login"],
+    )
+    PAYLOAD_SIGNATURE_MAX_AGE_SECONDS: int = _ler_int("PAYLOAD_SIGNATURE_MAX_AGE_SECONDS", 300)
     MAX_CONTENT_LENGTH: int = _ler_int("MAX_CONTENT_LENGTH_KB", 50) * 1024
+    FORCE_HTTPS: bool = _ler_bool("FORCE_HTTPS", False)
+    SSL_CERTFILE: str = os.getenv("SSL_CERTFILE", "")
+    SSL_KEYFILE: str = os.getenv("SSL_KEYFILE", "")
+    CORS_ALLOWED_ORIGINS: list[str] = _ler_lista(
+        "CORS_ALLOWED_ORIGINS",
+        ["http://127.0.0.1:8000", "http://localhost:8000"],
+    )
 
     DB_DRIVER: str = os.getenv("DB_DRIVER", "mysql+pymysql")
     DB_HOST: str = os.getenv("DB_HOST", "127.0.0.1")
@@ -65,6 +88,8 @@ class Settings:
 
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", str(Path("data") / "uploads"))
     MAX_UPLOAD_FILE_SIZE: int = _ler_int("MAX_UPLOAD_FILE_SIZE_MB", 10) * 1024 * 1024
+    MAX_EXCEL_ROWS: int = _ler_int("MAX_EXCEL_ROWS", 5000)
+    MAX_EXCEL_COLUMNS: int = _ler_int("MAX_EXCEL_COLUMNS", 200)
     ALLOWED_UPLOAD_EXTENSIONS: list[str] = _ler_lista("ALLOWED_UPLOAD_EXTENSIONS", [".xlsx", ".xls"])
     ALLOWED_UPLOAD_CONTENT_TYPES: list[str] = _ler_lista(
         "ALLOWED_UPLOAD_CONTENT_TYPES",
@@ -74,6 +99,10 @@ class Settings:
             "application/octet-stream",
         ],
     )
+    ANONYMIZE_AUDIT_PII: bool = _ler_bool("ANONYMIZE_AUDIT_PII", True)
+    AUDIT_LOG_RETENTION_DAYS: int = _ler_int("AUDIT_LOG_RETENTION_DAYS", 365)
+    AUTH_LOG_RETENTION_DAYS: int = _ler_int("AUTH_LOG_RETENTION_DAYS", 180)
+    UPLOAD_RETENTION_DAYS: int = _ler_int("UPLOAD_RETENTION_DAYS", 90)
 
 
 settings = Settings()

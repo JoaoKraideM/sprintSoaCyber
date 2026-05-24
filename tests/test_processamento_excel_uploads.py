@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date, datetime, timedelta
 from io import BytesIO
 import os
 import unittest
@@ -7,6 +8,7 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from starlette.requests import Request
 from starlette.datastructures import Headers
 
 # Evita dependencia de MySQL/PyMySQL no bootstrap de imports durante os testes.
@@ -16,9 +18,22 @@ os.environ["SQLITE_DATABASE_URL"] = f"sqlite:///{_BOOTSTRAP_DB}"
 os.environ["DATABASE_URL"] = f"sqlite:///{_BOOTSTRAP_DB}"
 
 from app.api.deps import verificar_rbac
+from app.core.config import settings
+from app.core.middleware import _validar_assinatura_payload
+from app.core.privacy import descriptografar_bytes
 from app.db.session import Base
-from app.models.modelos import LogModel, MarcaModel, MetricaVeiculoModel, ModeloModel, VeiculoModel, VersaoModel
+from app.models.modelos import (
+    LogAuthModel,
+    LogModel,
+    MarcaModel,
+    MetricaVeiculoModel,
+    ModeloModel,
+    PasswordResetTokenModel,
+    VeiculoModel,
+    VersaoModel,
+)
 from app.services.auth_service import AuthService
+from app.services.retencao_service import RetencaoService
 from app.services.upload_service import ImportacaoExcelError, UploadService
 from app.services.veiculo_service import VeiculoService
 
@@ -151,6 +166,7 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
 
     def test_upload_simples_cria_log_mesmo_sem_metrica(self):
         caminho_criado = None
+        excel_bytes = self._gerar_excel_bytes(valido=True)
         try:
             with self.SessionTesting() as db:
                 resultado = asyncio.run(
@@ -158,7 +174,7 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
                         db=db,
                         user_id=self.user_user_id,
                         user_email="user@sistema.local",
-                        arquivo=self._novo_upload_excel(self._gerar_excel_bytes(valido=True)),
+                        arquivo=self._novo_upload_excel(excel_bytes),
                         ip_origem="127.0.0.1",
                         user_agent="tests",
                     )
@@ -167,11 +183,15 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
 
                 self.assertIsNone(resultado["metrica_id"])
                 self.assertEqual(db.query(LogModel).count(), 1)
+                self.assertTrue(caminho_criado.name.endswith(".enc"))
+                self.assertNotEqual(caminho_criado.read_bytes(), excel_bytes)
+                self.assertEqual(descriptografar_bytes(caminho_criado.read_bytes()), excel_bytes)
 
                 log_envio = db.query(LogModel).filter(LogModel.acao == "ENVIO_INFORMACOES_EXCEL").first()
                 self.assertIsNone(log_envio.metrica_veiculo_id)
                 self.assertEqual(log_envio.dados_depois["nome_arquivo"], "fiap_ford.xlsx")
                 self.assertEqual(log_envio.dados_depois["status_envio"], "ARQUIVO_RECEBIDO")
+                self.assertTrue(log_envio.dados_depois["criptografado_em_repouso"])
         finally:
             if caminho_criado:
                 try:
@@ -255,6 +275,126 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
 
             self.assertIsNone(tentativa)
             self.assertEqual(db.query(VeiculoModel).count(), 3)
+
+    def test_logs_auth_pseudonimizam_dados_pessoais(self):
+        with self.SessionTesting() as db:
+            AuthService.registar_log_auth(
+                db,
+                user_id=self.user_user_id,
+                address="user@sistema.local",
+                ip="127.0.0.1",
+                user_agent="pytest-agent",
+                status=False,
+            )
+
+            log_auth = db.query(LogAuthModel).first()
+            self.assertTrue(log_auth.address.startswith("pseudo:"))
+            self.assertTrue(log_auth.ip.startswith("pseudo:"))
+            self.assertTrue(log_auth.user_agent.startswith("pseudo:"))
+            self.assertNotIn("user@sistema.local", log_auth.address)
+
+    def test_retencao_remove_logs_antigos_tokens_expirados_e_uploads(self):
+        upload_dir_original = settings.UPLOAD_DIR
+        upload_dir_teste = Path(__file__).resolve().parent / "tmp_uploads_retencao"
+        upload_dir_teste.mkdir(exist_ok=True)
+        arquivo_antigo = upload_dir_teste / "antigo.xlsx"
+        arquivo_antigo.write_bytes(b"teste")
+        antigo_timestamp = datetime.now().timestamp() - ((settings.UPLOAD_RETENTION_DAYS + 1) * 24 * 60 * 60)
+        os.utime(arquivo_antigo, (antigo_timestamp, antigo_timestamp))
+        settings.UPLOAD_DIR = str(upload_dir_teste)
+
+        try:
+            with self.SessionTesting() as db:
+                log_antigo = LogModel(
+                    user_id=self.user_user_id,
+                    acao="TESTE_RETENCAO",
+                    create_date=date.today() - timedelta(days=settings.AUDIT_LOG_RETENTION_DAYS + 1),
+                    hour_date=datetime.now().time().replace(microsecond=0),
+                )
+                log_auth_antigo = LogAuthModel(
+                    user_id=self.user_user_id,
+                    status=False,
+                    create_date=date.today() - timedelta(days=settings.AUTH_LOG_RETENTION_DAYS + 1),
+                    hour_date=datetime.now().time().replace(microsecond=0),
+                )
+                token_expirado = PasswordResetTokenModel(
+                    user_id=self.user_user_id,
+                    token="token-expirado",
+                    expires_at=datetime.now() - timedelta(days=1),
+                )
+                db.add_all([log_antigo, log_auth_antigo, token_expirado])
+                db.commit()
+
+                resultado = RetencaoService.expurgar_dados_antigos(db)
+
+                self.assertEqual(resultado["logs_removidos"], 1)
+                self.assertEqual(resultado["logs_auth_removidos"], 1)
+                self.assertEqual(resultado["tokens_expirados_removidos"], 1)
+                self.assertEqual(resultado["uploads_removidos"], 1)
+                self.assertFalse(arquivo_antigo.exists())
+        finally:
+            settings.UPLOAD_DIR = upload_dir_original
+            try:
+                upload_dir_teste.rmdir()
+            except OSError:
+                pass
+
+    def test_middleware_exige_assinatura_quando_configurado(self):
+        valor_original = settings.REQUIRE_PAYLOAD_SIGNATURE
+        settings.REQUIRE_PAYLOAD_SIGNATURE = True
+        try:
+            corpo = b'{"marca":"FORD","modelo":"RANGER 26MY","versao":"XLT","atributos_desejados":[]}'
+
+            async def receive():
+                return {"type": "http.request", "body": corpo, "more_body": False}
+
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "POST",
+                    "path": "/api/v1/veiculos/comparar",
+                    "query_string": b"",
+                    "headers": [(b"content-type", b"application/json")],
+                    "scheme": "http",
+                    "client": ("127.0.0.1", 12345),
+                    "server": ("testserver", 80),
+                },
+                receive,
+            )
+
+            resposta = asyncio.run(_validar_assinatura_payload(request))
+            self.assertEqual(resposta.status_code, 401)
+            self.assertIn("Assinatura", resposta.body.decode("utf-8"))
+        finally:
+            settings.REQUIRE_PAYLOAD_SIGNATURE = valor_original
+
+    def test_middleware_nao_exige_assinatura_para_auth_publico(self):
+        valor_original = settings.REQUIRE_PAYLOAD_SIGNATURE
+        settings.REQUIRE_PAYLOAD_SIGNATURE = True
+        try:
+            corpo = b'{"email":"user@sistema.local","password":"User12345"}'
+
+            async def receive():
+                return {"type": "http.request", "body": corpo, "more_body": False}
+
+            request = Request(
+                {
+                    "type": "http",
+                    "method": "POST",
+                    "path": "/api/v1/auth/login",
+                    "query_string": b"",
+                    "headers": [(b"content-type", b"application/json")],
+                    "scheme": "http",
+                    "client": ("127.0.0.1", 12345),
+                    "server": ("testserver", 80),
+                },
+                receive,
+            )
+
+            resposta = asyncio.run(_validar_assinatura_payload(request))
+            self.assertIsNone(resposta)
+        finally:
+            settings.REQUIRE_PAYLOAD_SIGNATURE = valor_original
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from app.core.privacy import sanitizar_para_auditoria
 from app.models.modelos import LogModel
 
 logger = logging.getLogger("AuditoriaService")
@@ -24,10 +25,10 @@ class AuditoriaService:
             metrica_veiculo_id=metrica_veiculo_id,
             user_id=user_id,
             acao=(acao or "ACAO")[0:50],
-            dados_antes=dados_antes,
-            dados_depois=dados_depois,
-            ip=ip_origem,
-            user_agent=(user_agent or "")[0:255] or None,
+            dados_antes=sanitizar_para_auditoria(dados_antes),
+            dados_depois=sanitizar_para_auditoria(dados_depois),
+            ip=sanitizar_para_auditoria(ip_origem, "ip"),
+            user_agent=sanitizar_para_auditoria((user_agent or "")[0:255], "user_agent") or None,
         )
         db.add(log)
         db.commit()

@@ -1,9 +1,26 @@
+import json
+import re
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.security import normalizar_email, sanitizar_string, validar_forca_senha
+
+CATALOGO_TEXTO_REGEX = re.compile(r"^[\w\s.,+()/&-]+$", re.UNICODE)
+ATRIBUTO_MAX_LENGTH = 120
+PACOTE_EQUIPAMENTOS_MAX_BYTES = 20_000
+
+
+def validar_texto_catalogo(valor: str, campo: str) -> str:
+    if not isinstance(valor, str):
+        raise ValueError(f"{campo} deve ser texto.")
+    texto = sanitizar_string(valor)
+    if not texto:
+        raise ValueError(f"{campo} nao pode ficar vazio.")
+    if not CATALOGO_TEXTO_REGEX.fullmatch(texto):
+        raise ValueError(f"{campo} contem caracteres fora do padrao permitido.")
+    return texto
 
 
 class CadastroUsuarioInput(BaseModel):
@@ -68,7 +85,7 @@ class ConsultaVeiculoInput(BaseModel):
     @field_validator("marca", "modelo", "versao", mode="before")
     @classmethod
     def validar_strings(cls, v):
-        return sanitizar_string(v)
+        return validar_texto_catalogo(v, "campo de consulta")
 
     @field_validator("atributos_desejados", mode="before")
     @classmethod
@@ -77,7 +94,13 @@ class ConsultaVeiculoInput(BaseModel):
             return []
         if not isinstance(v, list):
             raise ValueError("atributos_desejados deve ser lista.")
-        return [sanitizar_string(item) for item in v]
+        atributos = []
+        for item in v:
+            atributo = validar_texto_catalogo(item, "atributo_desejado")
+            if len(atributo) > ATRIBUTO_MAX_LENGTH:
+                raise ValueError("atributo_desejado excede o tamanho maximo.")
+            atributos.append(atributo)
+        return atributos
 
 
 class CadastroVeiculoInput(BaseModel):
@@ -95,7 +118,7 @@ class CadastroVeiculoInput(BaseModel):
     @field_validator("marca", "modelo", "versao", "motorizacao", "transmissao", "tracao", mode="before")
     @classmethod
     def sanitizar_campos(cls, v):
-        return sanitizar_string(v)
+        return validar_texto_catalogo(v, "campo de cadastro")
 
     @field_validator("observacao", mode="before")
     @classmethod
@@ -103,6 +126,14 @@ class CadastroVeiculoInput(BaseModel):
         if v is None:
             return None
         return sanitizar_string(v)
+
+    @field_validator("pacote_equipamentos")
+    @classmethod
+    def validar_tamanho_pacote_equipamentos(cls, v):
+        tamanho = len(json.dumps(v, ensure_ascii=False).encode("utf-8"))
+        if tamanho > PACOTE_EQUIPAMENTOS_MAX_BYTES:
+            raise ValueError("pacote_equipamentos excede o tamanho maximo permitido.")
+        return v
 
 
 class UploadArquivoResposta(BaseModel):

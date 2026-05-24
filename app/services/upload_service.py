@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.privacy import criptografar_bytes
 from app.core.security import sanitizar_string
 from app.services.event_bus import EventBus, EventoDominio
 from app.services.veiculo_service import VeiculoService
@@ -260,6 +261,17 @@ class UploadService:
             )
 
         worksheet = workbook["BASE"]
+        if worksheet.max_row > settings.MAX_EXCEL_ROWS:
+            raise ImportacaoExcelError(
+                "Planilha excede o limite de linhas.",
+                [f"A aba 'BASE' excede o limite de {settings.MAX_EXCEL_ROWS} linhas."],
+            )
+        if worksheet.max_column > settings.MAX_EXCEL_COLUMNS:
+            raise ImportacaoExcelError(
+                "Planilha excede o limite de colunas.",
+                [f"A aba 'BASE' excede o limite de {settings.MAX_EXCEL_COLUMNS} colunas."],
+            )
+
         linhas = list(worksheet.iter_rows(values_only=True))
         if not linhas:
             raise ImportacaoExcelError(
@@ -360,9 +372,11 @@ class UploadService:
         nome_original, extensao, conteudo, tamanho = await UploadService._ler_e_validar_upload(arquivo)
 
         upload_dir = UploadService._upload_dir_seguro()
-        nome_armazenado = f"{uuid.uuid4().hex}{extensao}"
+        sufixo_criptografia = ".enc" if settings.ENCRYPT_UPLOADS_AT_REST else ""
+        nome_armazenado = f"{uuid.uuid4().hex}{extensao}{sufixo_criptografia}"
         caminho_arquivo = upload_dir / nome_armazenado
-        caminho_arquivo.write_bytes(conteudo)
+        conteudo_armazenado = criptografar_bytes(conteudo) if settings.ENCRYPT_UPLOADS_AT_REST else conteudo
+        caminho_arquivo.write_bytes(conteudo_armazenado)
 
         EventBus.publicar(
             db,
@@ -380,6 +394,7 @@ class UploadService:
                     "caminho_armazenado": str(caminho_arquivo),
                     "tamanho_bytes": tamanho,
                     "mime_type": arquivo.content_type or "application/octet-stream",
+                    "criptografado_em_repouso": settings.ENCRYPT_UPLOADS_AT_REST,
                     "status_envio": "ARQUIVO_RECEBIDO",
                 },
             ),
