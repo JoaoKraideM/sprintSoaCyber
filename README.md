@@ -68,7 +68,7 @@ Prefixo da API: `/api/v1`
 Formato padrão:
 - Endpoints JSON usam `Content-Type: application/json`.
 - Endpoints protegidos exigem `Authorization: Bearer <access_token>`.
-- Erros do FastAPI retornam `{ "detail": "mensagem" }` ou `{ "detail": { ... } }`.
+- Endpoints protegidos usam o esquema Bearer documentado no OpenAPI/Swagger; erros do FastAPI seguem o contrato padrão `{ "detail": ... }`.
 - Campos de texto passam por sanitizacao antes de chegar nas regras de negocio.
 
 ### Resumo dos contratos
@@ -77,12 +77,56 @@ Formato padrão:
 |---|---|---|---|---|
 | `POST` | `/api/v1/auth/register` | Não | Publico | Cadastrar usuario comum |
 | `POST` | `/api/v1/auth/login` | Não | Publico | Gerar token JWT |
-| `POST` | `/api/v1/veiculos/comparar` | Sim | `admin`, `analista`, `user` | Consultar veiculo e atributos |
+| `POST` | `/api/v1/auth/password/reset` | Não | Token de uso único | Definir/redefinir senha sem armazenar token bruto |
+| `GET` | `/api/v1/veiculos` | Sim | `admin`, `analista`, `user` | Listar e filtrar veiculos |
+| `GET` | `/api/v1/veiculos/{id}` | Sim | `admin`, `analista`, `user` | Consultar um veiculo |
+| `GET` | `/api/v1/veiculos/comparar` | Sim | `admin`, `analista`, `user` | Comparar/consultar veiculo por parametros |
+| `POST` | `/api/v1/veiculos/comparar` | Sim | `admin`, `analista`, `user` | Compatibilidade legada para consulta |
 | `POST` | `/api/v1/veiculos` | Sim | `admin` | Cadastrar veiculo no catalogo |
+| `PATCH` | `/api/v1/veiculos/{id}` | Sim | `admin` | Atualizar parcialmente um veiculo |
+| `DELETE` | `/api/v1/veiculos/{id}` | Sim | `admin` | Remover logicamente um veiculo |
 | `POST` | `/api/v1/uploads/excel` | Sim | `admin`, `analista`, `user` | Enviar arquivo Excel |
 | `POST` | `/api/v1/uploads/excel/processar` | Sim | `admin`, `analista` | Processar Excel para catalogo |
+| `GET` | `/api/v1/admin/dashboard` | Sim | `admin` | Painel com indicadores de usuarios, catalogo, auditoria e Sprint 3 |
+| `GET` | `/api/v1/admin/comparacoes/veiculos` | Sim | `admin` | Comparar dois veiculos diretamente do banco |
 | `POST` | `/api/v1/admin/retencao/expurgar` | Sim | `admin` | Executar retencao e descarte seguro |
+| `GET` | `/api/v1/admin/usuarios` | Sim | `admin` | Listar usuarios sem expor senhas |
+| `POST` | `/api/v1/admin/usuarios` | Sim | `admin` | Criar usuario e gerar convite de senha |
+| `PATCH` | `/api/v1/admin/usuarios/{id}/role` | Sim | `admin` | Alterar role de usuario |
+| `POST` | `/api/v1/admin/usuarios/{id}/redefinir-senha` | Sim | `admin` | Gerar link temporario de redefinicao |
 | `GET` | `/health/db` | Não | Publico | Verificar conexao com o banco |
+
+
+### Painel administrativo — Sprint 3
+
+O sistema agora possui uma segunda area da aplicacao, exclusiva para usuarios com `role = admin`, acessivel em `http://127.0.0.1:8000/admin`.
+
+O painel consolida em uma unica tela:
+- indicadores reais do banco: usuarios por perfil, veiculos, marcas, modelos, versoes e metricas;
+- observabilidade: quantidade de logs de auditoria e tentativas de autenticacao, separando sucessos e falhas;
+- evidencias organizadas dos quatro blocos do Sprint 3: Pipeline DevSecOps, Seguranca em Codigo e Infraestrutura, Observabilidade/Resposta e Compliance/Seguranca Continua;
+- comparacao administrativa de dois veiculos cadastrados, consultando os registros e ultimas metricas diretamente no banco.
+
+A comparacao fica disponivel em `GET /api/v1/admin/comparacoes/veiculos?veiculo_id_a=1&veiculo_id_b=2` e apresenta potencia, preco, motorizacao, transmissao, tracao, equipamentos e diferencas numericas.
+
+O cadastro publico continua criando somente `user`. No **Painel Admin**, o administrador pode criar contas assistidas e escolher `user`, `analista` ou `admin`. A conta e criada sem receber uma senha em claro: o sistema gera um token aleatorio de uso unico, armazena apenas o hash SHA-256 desse token em `password_reset_tokens` e devolve o link temporario para envio ao usuario.
+
+O administrador tambem pode alterar a role de uma conta e gerar um novo link de redefinicao. Ao abrir o link, o usuario define a propria senha. O token e invalidado apos o uso ou expiracao.
+
+As senhas da tabela `users` **nao ficam disponiveis em texto puro**: o campo `password` guarda apenas um hash bcrypt derivado da credencial. Mesmo no fluxo administrativo, a senha escolhida pelo usuario nunca e devolvida pela API.
+
+### Testes da area administrativa
+
+Os testes de API tambem cobrem:
+- acesso do administrador ao dashboard;
+- bloqueio de usuario comum com `403`;
+- comparacao de dois veiculos usando dados persistidos no banco de teste.
+
+Execute com:
+
+```bash
+py -3 -m pytest -v
+```
 
 ### `POST /api/v1/auth/register`
 
@@ -176,6 +220,82 @@ Efeitos colaterais:
 Detalhes do token:
 - JWT inclui `sub`, `role`, `cred_fingerprint`, `dados_base64`, `iat` e `exp`.
 - O RBAC valida assinatura, expiracao, integridade do Base64 e fingerprint atual da credencial.
+
+### `GET /api/v1/veiculos`
+
+Lista veiculos ativos do catalogo. Aceita filtros opcionais `marca`, `modelo`, `versao`, `skip` e `limit`.
+
+Exemplo:
+
+```text
+GET /api/v1/veiculos?marca=FORD&modelo=Ranger&limit=20
+```
+
+Resposta `200 OK`:
+
+```json
+{
+  "itens": [
+    {
+      "id": 10,
+      "marca": "FORD",
+      "modelo": "Ranger",
+      "versao": "XLT",
+      "motorizacao": "2.0L Diesel",
+      "potencia_cv": 170,
+      "transmissao": "Automatica",
+      "tracao": "4x4",
+      "preco_sugerido": "250000.00",
+      "pacote_equipamentos": {},
+      "observacao": null,
+      "ativo": true
+    }
+  ],
+  "skip": 0,
+  "limit": 20,
+  "total": 1
+}
+```
+
+### `GET /api/v1/veiculos/{id}`
+
+Consulta um veiculo especifico. Retorna `404 Not Found` quando o recurso não existe ou já foi removido logicamente.
+
+### `GET /api/v1/veiculos/comparar`
+
+Representa a comparação como consulta HTTP `GET`, evitando verbo de ação no path. Exemplo:
+
+```text
+GET /api/v1/veiculos/comparar?marca=FORD&modelo=Ranger&versao=XLT&atributos_desejados=Airbag&atributos_desejados=Controle%20de%20estabilidade
+```
+
+Retorna o mesmo contrato de dados da comparação legada em `POST`.
+
+### `PATCH /api/v1/veiculos/{id}`
+
+Atualiza parcialmente os dados técnicos e/ou a última métrica do veiculo. Somente `admin`.
+
+Exemplo:
+
+```json
+{
+  "potencia_cv": 200,
+  "preco_sugerido": 260000.00
+}
+```
+
+Resposta `200 OK` com o identificador e a nova identificação do recurso.
+
+Erros:
+- `404 Not Found`: veículo inexistente/inativo.
+- `409 Conflict`: combinação marca/modelo/versão já possui outro veículo ativo.
+- `422 Unprocessable Entity`: payload inválido.
+
+### `DELETE /api/v1/veiculos/{id}`
+
+Executa remoção lógica, alterando `status` para inativo e preservando histórico e métricas. Somente `admin`.
+
+Resposta `204 No Content`.
 
 ### `POST /api/v1/veiculos/comparar`
 
@@ -518,7 +638,6 @@ Essas rotas retornam HTML e não fazem parte do contrato JSON da API:
 Para evoluir o sistema, a principal melhoria planejada e ampliar a captação de informações para preencher automaticamente tabelas que podem permanecer vazias enquanto determinados fluxos ainda não forem usados.
 
 Prioridades sugeridas:
-- Criar fluxo de recuperação de senha para popular `password_reset_tokens`, com solicitação de reset, token temporário, expiração e invalidação após uso.
 - Criar tela administrativa para cadastro assistido de marcas, modelos, versões e veículos, reduzindo depedência exclusiva do upload Excel para alimentar `marcas`, `modelos`, `versoes`, `veículos` e `metricas_veiculos`.
 - Expandir o processamento de Excel para reconhecer mais abas e layouts, captando preço sugerido, observações, atributos técnicos e pacotes de equipamentos com maior completude.
 - Criar rotina de importação incremental para arquivos já armazenados em `data/uploads`, permitindo reprocessar uploads antigos e preencher catálgo/métrica quando o upload simples ainda não tiver sido processado.
@@ -533,6 +652,21 @@ Fluxo futuro esperado:
 4. O catálogo grava dados nas tabelas relacionais.
 5. A auditoria registra a operação em `logs` ou `logs_auth`.
 6. O painel administrativo mostra pendências de preenchimento e permite complementar dados ausentes.
+
+## Testes automatizados
+
+Os testes agora cobrem duas camadas:
+- `tests/test_processamento_excel_uploads.py`: regras de negócio e segurança dos serviços.
+- `tests/test_api_endpoints.py`: integração HTTP com `TestClient`, incluindo login `200`, senha incorreta `401`, ausência de token `401`, RBAC `403` e CRUD REST de veículos (`201/200/204/404`).
+
+Instale as dependências e execute:
+
+```bash
+py -3 -m pip install -r requirements.txt
+py -3 -m pytest -v
+```
+
+Os testes da API usam um banco SQLite isolado e não dependem do MySQL de desenvolvimento.
 
 ## Configuração
 
@@ -594,8 +728,19 @@ py -3 -m app.db.init_db
 py -3 run.py
 ```
 
+Documentação interativa:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
 Teste de conexao:
 
 ```bash
 curl http://127.0.0.1:8000/health/db
 ```
+
+
+### Documentação local
+
+A rota `http://127.0.0.1:8000/docs` usa uma interface OpenAPI local, com CSS e JavaScript servidos pela própria aplicação. Isso evita dependência do CDN externo do Swagger UI e reduz problemas com bloqueios de Content Security Policy (CSP) de antivírus/extensões.
