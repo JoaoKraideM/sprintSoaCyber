@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.modelos import MarcaModel, MetricaVeiculoModel, ModeloModel, VeiculoModel, VersaoModel
-from app.schemas.schemas import CadastroVeiculoInput, ConsultaVeiculoInput
+from app.schemas.schemas import AtualizacaoVeiculoInput, CadastroVeiculoInput, ConsultaVeiculoInput
 
 
 class VeiculoService:
@@ -38,6 +38,96 @@ class VeiculoService:
             )
             .first()
         )
+
+    @staticmethod
+    def listar_veiculos(db: Session, marca: str | None = None, modelo: str | None = None, versao: str | None = None, skip: int = 0, limit: int = 50):
+        query = (
+            db.query(VeiculoModel, MarcaModel.nome, ModeloModel.nome, VersaoModel.nome)
+            .join(VersaoModel, VeiculoModel.versao_id == VersaoModel.id)
+            .join(ModeloModel, VersaoModel.modelo_id == ModeloModel.id)
+            .join(MarcaModel, ModeloModel.marca_id == MarcaModel.id)
+            .filter(VeiculoModel.status.is_(True))
+        )
+        if marca:
+            query = query.filter(MarcaModel.nome == marca)
+        if modelo:
+            query = query.filter(ModeloModel.nome == modelo)
+        if versao:
+            query = query.filter(VersaoModel.nome == versao)
+
+        return query.order_by(VeiculoModel.id.desc()).offset(skip).limit(limit).all()
+
+    @staticmethod
+    def obter_veiculo_por_id(db: Session, veiculo_id: int):
+        return (
+            db.query(VeiculoModel, MarcaModel.nome, ModeloModel.nome, VersaoModel.nome)
+            .join(VersaoModel, VeiculoModel.versao_id == VersaoModel.id)
+            .join(ModeloModel, VersaoModel.modelo_id == ModeloModel.id)
+            .join(MarcaModel, ModeloModel.marca_id == MarcaModel.id)
+            .filter(VeiculoModel.id == veiculo_id, VeiculoModel.status.is_(True))
+            .first()
+        )
+
+    @staticmethod
+    def atualizar_veiculo(db: Session, veiculo_id: int, payload: AtualizacaoVeiculoInput, user_id: int):
+        registro = VeiculoService.obter_veiculo_por_id(db, veiculo_id)
+        if not registro:
+            return None
+
+        veiculo, marca_atual, modelo_atual, versao_atual = registro
+        dados = payload.model_dump(exclude_unset=True)
+
+        marca = dados.pop("marca", marca_atual)
+        modelo = dados.pop("modelo", modelo_atual)
+        versao = dados.pop("versao", versao_atual)
+
+        if (marca, modelo, versao) != (marca_atual, modelo_atual, versao_atual):
+            _, _, nova_versao = VeiculoService._obter_ou_criar_modelo_versao(db, marca, modelo, versao)
+            conflito = (
+                db.query(VeiculoModel)
+                .filter(
+                    VeiculoModel.versao_id == nova_versao.id,
+                    VeiculoModel.id != veiculo_id,
+                    VeiculoModel.status.is_(True),
+                )
+                .first()
+            )
+            if conflito:
+                raise ValueError("Ja existe um veiculo ativo para a nova marca/modelo/versao.")
+            veiculo.versao_id = nova_versao.id
+
+        for campo in ("motorizacao", "potencia_cv", "transmissao", "tracao"):
+            if campo in dados:
+                setattr(veiculo, campo, dados[campo])
+
+        metrica = VeiculoService.obter_ultima_metrica(db, veiculo_id)
+        if metrica:
+            for campo in ("preco_sugerido", "pacote_equipamentos", "observacao"):
+                if campo in dados:
+                    setattr(metrica, campo, dados[campo])
+        elif any(campo in dados for campo in ("preco_sugerido", "pacote_equipamentos", "observacao")):
+            metrica = MetricaVeiculoModel(
+                veiculo_id=veiculo_id,
+                user_id=user_id,
+                preco_sugerido=dados.get("preco_sugerido"),
+                pacote_equipamentos=dados.get("pacote_equipamentos", {}),
+                observacao=dados.get("observacao"),
+            )
+            db.add(metrica)
+
+        db.commit()
+        db.refresh(veiculo)
+        return VeiculoService.obter_veiculo_por_id(db, veiculo_id)
+
+    @staticmethod
+    def remover_veiculo(db: Session, veiculo_id: int):
+        registro = VeiculoService.obter_veiculo_por_id(db, veiculo_id)
+        if not registro:
+            return False
+        veiculo = registro[0]
+        veiculo.status = False
+        db.commit()
+        return True
 
     @staticmethod
     def processar_analise_competitiva(db: Session, payload: ConsultaVeiculoInput) -> dict:

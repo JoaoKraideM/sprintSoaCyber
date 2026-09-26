@@ -1,5 +1,6 @@
 import hashlib
 import re
+import secrets
 
 from passlib.context import CryptContext
 
@@ -54,3 +55,12 @@ def verificar_palavra_passe(plain_password: str, hashed_password: str) -> bool:
 
 def gerar_hash_palavra_passe(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def gerar_token_seguro(tamanho_bytes: int = 32) -> str:
+    """Gera token de uso unico para convite/redefinicao de senha."""
+    return secrets.token_urlsafe(tamanho_bytes)
+
+
+def hash_token_seguro(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

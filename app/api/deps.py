@@ -1,4 +1,5 @@
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -15,16 +16,22 @@ def obter_db():
 
 
 def verificar_rbac(papeis_permitidos: list):
-    """Controle de acesso baseado em perfis com validacao criptografica do JWT."""
+    """Controle de acesso baseado em perfis com esquema Bearer documentado no OpenAPI."""
 
-    def validador(authorization: str = Header(...), db: Session = Depends(obter_db)):
-        if not authorization.startswith("Bearer "):
+    bearer = HTTPBearer(auto_error=False)
+
+    def validador(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        db: Session = Depends(obter_db),
+    ):
+        if credentials is None or credentials.scheme.lower() != "bearer":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Esquema de autenticacao invalido.",
+                detail="Credenciais Bearer ausentes ou invalidas.",
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
-        token = authorization.split(" ", 1)[1]
+        token = credentials.credentials
         try:
             payload = AuthService.validar_token_jwt(token)
             user = AuthService.obter_utilizador_por_email(db, payload["sub"])
@@ -60,6 +67,7 @@ def verificar_rbac(papeis_permitidos: list):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=str(exc),
+                headers={"WWW-Authenticate": "Bearer"},
             ) from exc
 
     return validador

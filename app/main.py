@@ -21,13 +21,15 @@ app = FastAPI(
     title="Plataforma de Inteligencia Competitiva Automotiva (SOA + Cyber Secure)",
     description="Base de cadastro, autenticacao JWT e upload Excel com arquitetura em camadas.",
     version="3.1.0",
+    docs_url=None,
+    redoc_url=None,
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Payload-Signature", "X-Payload-Timestamp"],
 )
 
@@ -43,9 +45,42 @@ _session_cookie_name = "ica_access_token"
 app.mount("/static", StaticFiles(directory=str(_web_dir)), name="static")
 
 
+@app.get("/docs", include_in_schema=False)
+def servir_documentacao_local():
+    """Interface local de documentação OpenAPI sem dependências externas de CDN."""
+    html = f"""<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentação da API</title>
+  <link rel="stylesheet" href="/static/openapi-local/docs.css">
+</head>
+<body>
+  <header>
+    <h1 id="api-title">Documentação da API</h1>
+    <p id="api-description">Carregando especificação OpenAPI...</p>
+  </header>
+  <main>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Buscar por endpoint, método ou descrição...">
+      <select id="method-filter" aria-label="Filtrar por método HTTP">
+        <option value="ALL">Todos os métodos</option>
+        <option>GET</option><option>POST</option><option>PUT</option>
+        <option>PATCH</option><option>DELETE</option>
+      </select>
+    </div>
+    <section id="api-docs" aria-live="polite"><p class="muted">Carregando endpoints...</p></section>
+  </main>
+  <script src="/static/openapi-local/docs.js" defer></script>
+</body>
+</html>"""
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
 def renderizar_pagina_web(tela_ativa: str) -> HTMLResponse:
     html = (_web_dir / "index.html").read_text(encoding="utf-8")
-    telas = {"login", "registro", "upload"}
+    telas = {"login", "registro", "upload", "admin", "reset"}
     tela = tela_ativa if tela_ativa in telas else "login"
 
     for nome_tela in telas:
@@ -87,6 +122,22 @@ def token_cookie_valido(
     return payload["cred_fingerprint"] == fingerprint_atual and payload.get("role") in {"admin", "analista", "user"}
 
 
+def token_cookie_admin(
+    access_token: str | None = Cookie(default=None, alias=_session_cookie_name),
+    db: Session = Depends(obter_db),
+) -> bool:
+    if not access_token:
+        return False
+    try:
+        payload = AuthService.validar_token_jwt(access_token)
+        user = AuthService.obter_utilizador_por_email(db, payload["sub"])
+    except ValueError:
+        return False
+    if not user or not user.status or user.role != "admin":
+        return False
+    return payload["cred_fingerprint"] == AuthService.fingerprint_atual_do_utilizador(user)
+
+
 @app.get("/", include_in_schema=False)
 def servir_site():
     return renderizar_pagina_web("login")
@@ -114,6 +165,25 @@ def servir_upload(autenticado: bool = Depends(token_cookie_valido)):
     if not autenticado:
         return RedirectResponse("/login", status_code=303)
     return renderizar_pagina_web("upload")
+
+
+@app.get("/redefinir-senha", include_in_schema=False)
+def servir_redefinicao_senha():
+    return renderizar_pagina_web("reset")
+
+
+@app.get("/admin", include_in_schema=False)
+def servir_painel_admin(autenticado: bool = Depends(token_cookie_admin)):
+    if not autenticado:
+        return RedirectResponse("/login", status_code=303)
+    return renderizar_pagina_web("admin")
+
+
+@app.get("/painel-admin", include_in_schema=False)
+def servir_painel_admin_alias(autenticado: bool = Depends(token_cookie_admin)):
+    if not autenticado:
+        return RedirectResponse("/login", status_code=303)
+    return renderizar_pagina_web("admin")
 
 
 @app.get("/health/db", tags=["Health"])

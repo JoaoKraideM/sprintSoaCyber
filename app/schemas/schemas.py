@@ -136,6 +136,43 @@ class CadastroVeiculoInput(BaseModel):
         return v
 
 
+class AtualizacaoVeiculoInput(BaseModel):
+    marca: Optional[str] = Field(default=None, max_length=255)
+    modelo: Optional[str] = Field(default=None, max_length=100)
+    versao: Optional[str] = Field(default=None, max_length=100)
+    motorizacao: Optional[str] = Field(default=None, max_length=100)
+    potencia_cv: Optional[int] = Field(default=None, ge=1)
+    transmissao: Optional[str] = Field(default=None, max_length=50)
+    tracao: Optional[str] = Field(default=None, max_length=50)
+    preco_sugerido: Optional[Decimal] = Field(default=None, ge=0)
+    pacote_equipamentos: Optional[Dict[str, Any]] = None
+    observacao: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("marca", "modelo", "versao", "motorizacao", "transmissao", "tracao", mode="before")
+    @classmethod
+    def sanitizar_campos(cls, v):
+        if v is None:
+            return None
+        return validar_texto_catalogo(v, "campo de atualizacao")
+
+    @field_validator("observacao", mode="before")
+    @classmethod
+    def sanitizar_observacao(cls, v):
+        if v is None:
+            return None
+        return sanitizar_string(v)
+
+    @field_validator("pacote_equipamentos")
+    @classmethod
+    def validar_tamanho_pacote_equipamentos(cls, v):
+        if v is None:
+            return v
+        tamanho = len(json.dumps(v, ensure_ascii=False).encode("utf-8"))
+        if tamanho > PACOTE_EQUIPAMENTOS_MAX_BYTES:
+            raise ValueError("pacote_equipamentos excede o tamanho maximo permitido.")
+        return v
+
+
 class UploadArquivoResposta(BaseModel):
     status: str
     mensagem: str
@@ -153,3 +190,51 @@ class ProcessamentoExcelResposta(BaseModel):
     veiculos_criados: int
     metricas_criadas: int
     erros_validacao: List[str] = Field(default_factory=list)
+
+class AdminCriarUsuarioInput(BaseModel):
+    nome: Optional[str] = Field(default=None, max_length=120)
+    email: str = Field(..., max_length=120)
+    role: str = Field(default="user", max_length=30)
+
+    @field_validator("nome", mode="before")
+    @classmethod
+    def validar_nome_admin(cls, v):
+        if v is None:
+            return None
+        return sanitizar_string(v) or None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validar_email_admin(cls, v):
+        return normalizar_email(v)
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def validar_role_admin(cls, v):
+        role = sanitizar_string(v).lower()
+        if role not in {"admin", "analista", "user", "usuario"}:
+            raise ValueError("Role invalida.")
+        return role
+
+
+class AdminAlterarRoleInput(BaseModel):
+    role: str = Field(..., max_length=30)
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def validar_role_admin(cls, v):
+        role = sanitizar_string(v).lower()
+        if role not in {"admin", "analista", "user", "usuario"}:
+            raise ValueError("Role invalida.")
+        return role
+
+
+class RedefinirSenhaInput(BaseModel):
+    token: str = Field(..., min_length=40, max_length=255)
+    password: str = Field(..., min_length=8, max_length=120)
+
+    @field_validator("password")
+    @classmethod
+    def validar_password_reset(cls, v):
+        validar_forca_senha(v)
+        return v

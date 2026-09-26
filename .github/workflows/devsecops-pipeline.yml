@@ -1,0 +1,106 @@
+name: DevSecOps Pipeline (Sprint 3 - Ford Challenge)
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  # 1) Testes automatizados (regressao funcional antes de qualquer verificacao de seguranca)
+  testes:
+    name: Testes automatizados
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests/ -v
+
+  # 2) SAST - Static Application Security Testing
+  sast:
+    name: SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install bandit
+      - name: Executar Bandit e falhar em severidade media/alta
+        run: bandit -r app -ll -f json -o bandit-report.json
+      - name: Publicar relatorio SAST como evidencia
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-bandit-report
+          path: bandit-report.json
+
+  # 3) SCA - Software Composition Analysis (dependencias vulneraveis)
+  sca:
+    name: SCA (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - name: Auditar dependencias do requirements.txt
+        run: pip-audit -r requirements.txt -f json -o pip-audit-report.json || true
+      - name: Publicar relatorio SCA como evidencia
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-pip-audit-report
+          path: pip-audit-report.json
+
+  # 4) Secret Scanning - varre todo o historico de commits em busca de segredos
+  secret-scanning:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Executar Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 5) Container Security - build da imagem Docker (IaC) + scan de vulnerabilidades
+  container-scan:
+    name: Container Scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: [testes]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build da imagem
+        run: docker build -t sprint3-soa-cyber:${{ github.sha }} .
+      - name: Trivy - scan de vulnerabilidades na imagem
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "sprint3-soa-cyber:${{ github.sha }}"
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0" # trocar para "1" quando o time decidir bloquear o merge
+      - name: Trivy - scan do Dockerfile (misconfiguration/IaC)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: "config"
+          scan-ref: "Dockerfile"
+          exit-code: "0"
+
+  # Gate final: reune os resultados como evidencia consolidada do pipeline DevSecOps
+  resumo:
+    name: Resumo do pipeline
+    runs-on: ubuntu-latest
+    needs: [testes, sast, sca, secret-scanning, container-scan]
+    if: always()
+    steps:
+      - run: echo "Pipeline DevSecOps executado. Ver artefatos de cada job para evidencias (SAST/SCA/Secret Scan/Container Scan)."

@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
@@ -249,8 +250,9 @@ class ProcessamentoExcelUploadsTestCase(unittest.TestCase):
         validador = verificar_rbac(["admin", "analista"])
 
         with self.SessionTesting() as db:
+            credenciais = HTTPAuthorizationCredentials(scheme="Bearer", credentials=self.user_token)
             with self.assertRaises(HTTPException) as contexto:
-                validador(authorization=f"Bearer {self.user_token}", db=db)
+                validador(credentials=credenciais, db=db)
 
             self.assertEqual(contexto.exception.status_code, 403)
 

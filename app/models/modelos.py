@@ -53,6 +53,7 @@ class UserModel(AuditColumnsMixin, Base):
     metricas = relationship("MetricaVeiculoModel", back_populates="user")
     logs = relationship("LogModel", back_populates="user")
     logs_auth = relationship("LogAuthModel", back_populates="user")
+    password_reset_tokens = relationship("PasswordResetTokenModel", back_populates="user", cascade="all, delete-orphan")
 
 
 class MarcaModel(AuditColumnsMixin, Base):
@@ -197,3 +198,5 @@ class PasswordResetTokenModel(Base):
     expires_at = Column(DateTime, nullable=False)
     create_at = Column(Date, nullable=False, default=date.today)
     hour_date = Column(Time, nullable=False, default=_hora_atual_utc)
+
+    user = relationship("UserModel", back_populates="password_reset_tokens")

@@ -21,6 +21,7 @@
         </div>
 
         <div class="header-actions">
+          <a class="link-button admin-nav-link" id="nav-admin-btn" href="/admin" data-admin-only hidden>Painel Admin</a>
           <button
             class="header-logout-btn"
             id="nav-logout-btn"
@@ -169,6 +170,87 @@
             </form>
             <p class="feedback" id="upload-feedback" aria-live="polite"></p>
           </div>
+        </section>
+
+        <section
+          class="screen {{reset_screen_active}}"
+          id="screen-reset"
+          aria-labelledby="reset-title"
+          {{reset_screen_hidden}}
+        >
+          <div class="screen-copy">
+            <p class="eyebrow">Seguranca</p>
+            <h2 id="reset-title">Definir nova senha</h2>
+            <p>Use o link de convite ou redefinicao recebido. O token e de uso unico e nao fica armazenado em texto puro no banco.</p>
+          </div>
+          <div class="panel">
+            <form id="form-reset-password">
+              <label for="reset-password">Nova senha</label>
+              <input id="reset-password" type="password" required minlength="8" maxlength="120" autocomplete="new-password" />
+              <label for="reset-password-confirm">Confirmar nova senha</label>
+              <input id="reset-password-confirm" type="password" required minlength="8" maxlength="120" autocomplete="new-password" />
+              <button type="submit">Salvar nova senha</button>
+            </form>
+            <p class="feedback" id="reset-feedback" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section
+          class="screen {{admin_screen_active}} admin-screen"
+          id="screen-admin"
+          aria-labelledby="admin-title"
+          {{admin_screen_hidden}}
+        >
+          <div class="admin-heading">
+            <p class="eyebrow">Controle administrativo</p>
+            <h2 id="admin-title">Painel de Segurança & Inteligência</h2>
+            <p>Área exclusiva do <strong>role admin</strong> com indicadores do banco, evidências do Sprint 3 e comparações entre veículos cadastrados.</p>
+          </div>
+
+          <div class="admin-toolbar">
+            <button type="button" id="admin-refresh-btn">Atualizar indicadores</button>
+            <span class="admin-status" id="admin-status" aria-live="polite"></span>
+          </div>
+
+          <div class="metrics-grid" id="admin-metrics"></div>
+
+          <div class="admin-columns">
+            <section class="panel admin-panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">Sprint 3</p><h3>Segurança, DevSecOps e Compliance</h3></div>
+              </div>
+              <div id="sprint3-cards" class="sprint3-grid"></div>
+            </section>
+
+            <section class="panel admin-panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">Banco de dados</p><h3>Comparar veículos</h3></div>
+              </div>
+              <p class="helper">Informe os IDs de dois veículos ativos ou históricos para comparar potência, preço, motorização, transmissão, tração e equipamentos.</p>
+              <div class="compare-form">
+                <div><label for="compare-id-a">Veículo A</label><input id="compare-id-a" type="number" min="1" placeholder="ID"></div>
+                <div><label for="compare-id-b">Veículo B</label><input id="compare-id-b" type="number" min="1" placeholder="ID"></div>
+                <button type="button" id="compare-btn">Comparar</button>
+              </div>
+              <div id="compare-result" class="compare-result"></div>
+            </section>
+          </div>
+
+          <section class="panel admin-panel admin-users-panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Gestao de acesso</p><h3>Usuarios, roles e redefinicao de senha</h3></div>
+            </div>
+            <p class="helper">O administrador cria a conta e define a role. A senha nao e exibida nem armazenada em texto puro: o usuario recebe um link de uso unico para definir a propria senha.</p>
+            <form id="form-admin-user" class="admin-user-form">
+              <div><label for="admin-user-nome">Nome</label><input id="admin-user-nome" maxlength="120" placeholder="Nome do usuario" /></div>
+              <div><label for="admin-user-email">Email</label><input id="admin-user-email" type="email" required maxlength="120" placeholder="usuario@exemplo.com" /></div>
+              <div><label for="admin-user-role">Role</label><select id="admin-user-role"><option value="user">user</option><option value="analista">analista</option><option value="admin">admin</option></select></div>
+              <button type="submit">Criar usuario</button>
+            </form>
+            <p class="feedback" id="admin-user-feedback" aria-live="polite"></p>
+            <div id="admin-invite-result" class="invite-result"></div>
+            <div id="admin-users-list" class="admin-users-list"></div>
+          </section>
         </section>
       </main>
     </div>

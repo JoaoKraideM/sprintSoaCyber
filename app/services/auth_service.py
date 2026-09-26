@@ -10,13 +10,15 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.privacy import sanitizar_para_auditoria
 from app.core.security import (
+    gerar_token_seguro,
+    hash_token_seguro,
     gerar_fingerprint_hash,
     gerar_hash_credencial,
     normalizar_email,
     sanitizar_string,
     verificar_hash_credencial,
 )
-from app.models.modelos import LogAuthModel, UserModel
+from app.models.modelos import LogAuthModel, PasswordResetTokenModel, UserModel
 
 
 ROLE_MAP = {
@@ -47,6 +49,27 @@ class AuthService:
             nome=nome_final,
             email=email_normalizado,
             password=gerar_hash_credencial(email_normalizado, password),
+            role=AuthService.normalizar_role(role),
+            status=True,
+        )
+        db.add(novo)
+        db.commit()
+        db.refresh(novo)
+        return novo
+
+    @staticmethod
+    def cadastrar_utilizador_sem_senha(db: Session, email: str, role: str = "user", nome: str | None = None) -> UserModel:
+        """Cria conta sem receber/armazenar senha em claro; senha sera definida pelo usuario via token unico."""
+        email_normalizado = normalizar_email(email)
+        if db.query(UserModel).filter(UserModel.email == email_normalizado).first():
+            raise ValueError("Utilizador ja cadastrado.")
+
+        nome_final = sanitizar_string(nome or "") or email_normalizado.split("@")[0]
+        senha_inicial_descartavel = gerar_token_seguro(32)
+        novo = UserModel(
+            nome=nome_final,
+            email=email_normalizado,
+            password=gerar_hash_credencial(email_normalizado, senha_inicial_descartavel),
             role=AuthService.normalizar_role(role),
             status=True,
         )
@@ -138,6 +161,56 @@ class AuthService:
             "dados": dados,
         }
 
+
+    @staticmethod
+    def criar_convite_senha(db: Session, user: UserModel, validade_minutos: int = 30) -> tuple[str, datetime]:
+        """Cria token de configuracao/reset; somente o hash vai para o banco."""
+        db.query(PasswordResetTokenModel).filter(
+            PasswordResetTokenModel.user_id == user.id
+        ).delete(synchronize_session=False)
+
+        token = gerar_token_seguro(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=validade_minutos)
+        registro = PasswordResetTokenModel(
+            user_id=user.id,
+            token=hash_token_seguro(token),
+            expires_at=expires_at,
+        )
+        db.add(registro)
+        db.commit()
+        return token, expires_at
+
+    @staticmethod
+    def redefinir_senha_por_token(db: Session, token: str, nova_senha: str) -> UserModel:
+        if not token or len(token) < 40:
+            raise ValueError("Token de redefinicao invalido.")
+        registro = (
+            db.query(PasswordResetTokenModel)
+            .filter(PasswordResetTokenModel.token == hash_token_seguro(token))
+            .first()
+        )
+        agora = datetime.now(timezone.utc)
+        if not registro or registro.expires_at.replace(tzinfo=timezone.utc) < agora:
+            if registro:
+                db.delete(registro)
+                db.commit()
+            raise ValueError("Token de redefinicao expirado ou invalido.")
+
+        user = db.query(UserModel).filter(UserModel.id == registro.user_id).first()
+        if not user or not user.status:
+            db.delete(registro)
+            db.commit()
+            raise ValueError("Utilizador inexistente ou inativo.")
+
+        validar_forca_senha(nova_senha)
+        user.password = gerar_hash_credencial(user.email, nova_senha)
+        user.update_date = datetime.now(timezone.utc).date()
+        user.update_hour = datetime.now(timezone.utc).time().replace(microsecond=0)
+        db.delete(registro)
+        db.commit()
+        db.refresh(user)
+        return user
+
     @staticmethod
     def fingerprint_atual_do_utilizador(user: UserModel) -> str:
         return gerar_fingerprint_hash(user.password)
@@ -164,3 +237,4 @@ class AuthService:
         db.commit()
         db.refresh(log_auth)
         return log_auth
+

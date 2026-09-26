@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import obter_db
 from app.core.config import settings
-from app.schemas.schemas import CadastroUsuarioInput, LoginInput
+from app.schemas.schemas import CadastroUsuarioInput, LoginInput, RedefinirSenhaInput
 from app.services.auth_service import AuthService
 from app.services.event_bus import EventBus, EventoDominio
 
@@ -117,4 +117,18 @@ def efetuar_login(dados: LoginInput, request: Request, db: Session = Depends(obt
         "email": user.email,
         "role": user.role,
         "nome": user.nome,
+    }
+
+
+@router.post("/password/reset", status_code=status.HTTP_200_OK)
+def redefinir_senha(dados: RedefinirSenhaInput, db: Session = Depends(obter_db)):
+    try:
+        user = AuthService.redefinir_senha_por_token(db, dados.token, dados.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return {
+        "status": "sucesso",
+        "mensagem": "Senha definida com sucesso. O token foi invalidado e nao pode ser reutilizado.",
+        "email": user.email,
     }
