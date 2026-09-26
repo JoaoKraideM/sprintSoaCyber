@@ -83,14 +83,14 @@ jobs:
       - name: Build da imagem
         run: docker build -t sprint3-soa-cyber:${{ github.sha }} .
       - name: Trivy - scan de vulnerabilidades na imagem
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: "sprint3-soa-cyber:${{ github.sha }}"
           format: "table"
           severity: "CRITICAL,HIGH"
           exit-code: "0" # trocar para "1" quando o time decidir bloquear o merge
       - name: Trivy - scan do Dockerfile (misconfiguration/IaC)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: "config"
           scan-ref: "Dockerfile"
