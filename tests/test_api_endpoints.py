@@ -16,6 +16,11 @@ from app.main import app
 from app.services.auth_service import AuthService
 
 
+def _client() -> TestClient:
+    # O .env exige HTTPS; simule esse esquema no ASGI TestClient.
+    return TestClient(app, base_url="https://testserver")
+
+
 def override_db():
     db = SessionLocal()
     try:
@@ -50,7 +55,7 @@ def teardown_module():
 
 
 def test_login_sucesso():
-    client = TestClient(app)
+    client = _client()
     response = client.post("/api/v1/auth/login", json={
         "email": "admin@test.local",
         "password": "Admin1234",
@@ -61,7 +66,7 @@ def test_login_sucesso():
 
 
 def test_login_senha_incorreta():
-    client = TestClient(app)
+    client = _client()
     response = client.post("/api/v1/auth/login", json={
         "email": "admin@test.local",
         "password": "SenhaErrada123",
@@ -70,13 +75,13 @@ def test_login_senha_incorreta():
 
 
 def test_endpoint_protegido_sem_token():
-    client = TestClient(app)
+    client = _client()
     response = client.get("/api/v1/veiculos")
     assert response.status_code == 401
 
 
 def test_endpoint_admin_com_role_user():
-    client = TestClient(app)
+    client = _client()
     token = AuthService.criar_token_jwt(
         "user@test.local",
         "user",
@@ -112,7 +117,7 @@ def _veiculo_payload():
 
 
 def test_crud_veiculo_com_testclient():
-    client = TestClient(app)
+    client = _client()
     token = _token("admin2@test.local", "Admin1234", "admin")
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -143,7 +148,7 @@ def test_crud_veiculo_com_testclient():
 
 
 def test_painel_admin_e_comparacao_de_veiculos():
-    client = TestClient(app)
+    client = _client()
     token = _token("dashboard@test.local", "Admin1234", "admin")
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -174,7 +179,7 @@ def test_painel_admin_e_comparacao_de_veiculos():
 
 
 def test_painel_admin_bloqueia_usuario_comum():
-    client = TestClient(app)
+    client = _client()
     token = _token("normal-dashboard@test.local", "User12345", "user")
     response = client.get("/api/v1/admin/dashboard", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
