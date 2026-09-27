@@ -1,18 +1,28 @@
 # MEMBROS
-- Douglas dos Santos Melo RM556439
-- Henrique Sanches RM557959
-- João Pedro Kraide Máximo RM563166
-- Matheus Marcelino Dantas da Silva RM556332
-- Nicolas Caciolato reis RM556506
+- Douglas dos Santos Melo — RM556439
+- Henrique Sanches — RM557959
+- João Pedro Kraide Máximo — RM563166
+- Matheus Marcelino Dantas da Silva — RM556332
+- Nicolas Caciolato Reis — RM556506
 
-# Projeto Base - Sistema Veículos (SOA + Cyber)
-Aplicação web e API em Python (FastAPI) com:
-- cadastro/login de usuários
-- autenticação JWT com payload em Base64
-- cadastro e consulta de veículos
-- upload simples de Excel
-- processamento estruturado de Excel para alimentar catálogo
-- logs/auditoria conforme schema relacional solicitado
+# Ford Challenge — Sistema de Inteligência Competitiva Automotiva
+
+Aplicação web e API desenvolvida em Python com FastAPI para gerenciamento, processamento e análise de informações automotivas.
+
+Principais funcionalidades:
+
+- cadastro e autenticação de usuários;
+- autenticação JWT com controle de acesso baseado em perfis (RBAC);
+- perfis `user`, `analista` e `admin`;
+- cadastro, consulta e comparação de veículos;
+- upload e processamento estruturado de arquivos Excel;
+- painel administrativo;
+- logs de autenticação e auditoria;
+- criptografia de arquivos em repouso;
+- proteção da API com rate limiting, validação de entrada e headers de segurança;
+- suporte a HTTPS/TLS;
+- pipeline DevSecOps com testes automatizados e scanners de segurança;
+- execução através de Docker.
 
 ## Diagrama arquitetural
 
@@ -23,17 +33,17 @@ flowchart LR
 
     api --> auth[Auth Service<br/>JWT + RBAC]
     api --> uploads[Upload Service<br/>Validação e storage]
-    api --> veículos[Catálogo Service<br/>Veículos e métricas]
+    api --> veiculos[Catálogo Service<br/>Veículos e métricas]
 
     uploads --> storage[(Data/uploads<br/>Arquivos Excel)]
     uploads --> parser[Excel Processor<br/>Aba BASE / Data sheet Ford]
-    parser --> eventos[Domain Event Bus<br/>contratos internos]
-    eventos --> veículos
+    parser --> eventos[Domain Event Bus<br/>Contratos internos]
+    eventos --> veiculos
 
-    veículos --> db[(MySQL<br/>Catálogo relacional)]
+    veiculos --> db[(MySQL<br/>Catálogo relacional)]
     auth --> eventos
     uploads --> eventos
-    veículos --> eventos
+    veiculos --> eventos
     eventos --> logs[Audit / Logs Service<br/>logs e logs_auth]
     logs --> db
 
@@ -41,86 +51,115 @@ flowchart LR
     reporting --> db
 ```
 
-## Schema de banco (atual)
+## Schema de banco atual
 
-Tabelas implementadas no codigo:
+Tabelas implementadas:
+
 - `users`
 - `marcas`
 - `modelos`
 - `versoes`
-- `veículos`
+- `veiculos`
 - `metricas_veiculos`
 - `logs`
 - `logs_auth`
 - `password_reset_tokens`
 
 Importante:
-- A aplicação **não recria tabelas automaticamente** no startup.
-- O script SQL do schema fica em `app/db/schema.sql`.
-- Para criar/recriar o banco MySQL `veículos_db`, execute `py -3 -m app.db.init_db`.
+
+- A aplicação não recria as tabelas automaticamente durante o startup.
+- O schema SQL está disponível em `app/db/schema.sql`.
+- Para criar ou recriar o banco MySQL `veiculos_db`, execute:
+
+```bash
+py -3 -m app.db.init_db
+```
 
 ## Contratos dos endpoints utilizados
 
-Base URL local: `http://127.0.0.1:8000`
+Base URL local:
 
-Prefixo da API: `/api/v1`
+```text
+http://127.0.0.1:8000
+```
+
+Prefixo da API:
+
+```text
+/api/v1
+```
 
 Formato padrão:
-- Endpoints JSON usam `Content-Type: application/json`.
-- Endpoints protegidos exigem `Authorization: Bearer <access_token>`.
-- Endpoints protegidos usam o esquema Bearer documentado no OpenAPI/Swagger; erros do FastAPI seguem o contrato padrão `{ "detail": ... }`.
-- Campos de texto passam por sanitizacao antes de chegar nas regras de negocio.
+
+- endpoints JSON usam `Content-Type: application/json`;
+- endpoints protegidos exigem `Authorization: Bearer <access_token>`;
+- endpoints protegidos utilizam o esquema Bearer documentado na documentação OpenAPI;
+- erros de validação seguem o contrato padrão do FastAPI com `{ "detail": ... }`;
+- campos de texto passam por sanitização antes de chegar às regras de negócio.
 
 ### Resumo dos contratos
 
-| Método | Endpoint | Autenticacao | Perfis | Uso |
+| Método | Endpoint | Autenticação | Perfis | Uso |
 |---|---|---|---|---|
-| `POST` | `/api/v1/auth/register` | Não | Publico | Cadastrar usuario comum |
-| `POST` | `/api/v1/auth/login` | Não | Publico | Gerar token JWT |
+| `POST` | `/api/v1/auth/register` | Não | Público | Cadastrar usuário comum |
+| `POST` | `/api/v1/auth/login` | Não | Público | Gerar token JWT |
 | `POST` | `/api/v1/auth/password/reset` | Não | Token de uso único | Definir/redefinir senha sem armazenar token bruto |
-| `GET` | `/api/v1/veiculos` | Sim | `admin`, `analista`, `user` | Listar e filtrar veiculos |
-| `GET` | `/api/v1/veiculos/{id}` | Sim | `admin`, `analista`, `user` | Consultar um veiculo |
-| `GET` | `/api/v1/veiculos/comparar` | Sim | `admin`, `analista`, `user` | Comparar/consultar veiculo por parametros |
+| `GET` | `/api/v1/veiculos` | Sim | `admin`, `analista`, `user` | Listar e filtrar veículos |
+| `GET` | `/api/v1/veiculos/{id}` | Sim | `admin`, `analista`, `user` | Consultar um veículo |
+| `GET` | `/api/v1/veiculos/comparar` | Sim | `admin`, `analista`, `user` | Comparar/consultar veículo por parâmetros |
 | `POST` | `/api/v1/veiculos/comparar` | Sim | `admin`, `analista`, `user` | Compatibilidade legada para consulta |
-| `POST` | `/api/v1/veiculos` | Sim | `admin` | Cadastrar veiculo no catalogo |
-| `PATCH` | `/api/v1/veiculos/{id}` | Sim | `admin` | Atualizar parcialmente um veiculo |
-| `DELETE` | `/api/v1/veiculos/{id}` | Sim | `admin` | Remover logicamente um veiculo |
+| `POST` | `/api/v1/veiculos` | Sim | `admin` | Cadastrar veículo no catálogo |
+| `PATCH` | `/api/v1/veiculos/{id}` | Sim | `admin` | Atualizar parcialmente um veículo |
+| `DELETE` | `/api/v1/veiculos/{id}` | Sim | `admin` | Remover logicamente um veículo |
 | `POST` | `/api/v1/uploads/excel` | Sim | `admin`, `analista`, `user` | Enviar arquivo Excel |
-| `POST` | `/api/v1/uploads/excel/processar` | Sim | `admin`, `analista` | Processar Excel para catalogo |
-| `GET` | `/api/v1/admin/dashboard` | Sim | `admin` | Painel com indicadores de usuarios, catalogo, auditoria e Sprint 3 |
-| `GET` | `/api/v1/admin/comparacoes/veiculos` | Sim | `admin` | Comparar dois veiculos diretamente do banco |
-| `POST` | `/api/v1/admin/retencao/expurgar` | Sim | `admin` | Executar retencao e descarte seguro |
-| `GET` | `/api/v1/admin/usuarios` | Sim | `admin` | Listar usuarios sem expor senhas |
-| `POST` | `/api/v1/admin/usuarios` | Sim | `admin` | Criar usuario e gerar convite de senha |
-| `PATCH` | `/api/v1/admin/usuarios/{id}/role` | Sim | `admin` | Alterar role de usuario |
-| `POST` | `/api/v1/admin/usuarios/{id}/redefinir-senha` | Sim | `admin` | Gerar link temporario de redefinicao |
-| `GET` | `/health/db` | Não | Publico | Verificar conexao com o banco |
-
+| `POST` | `/api/v1/uploads/excel/processar` | Sim | `admin`, `analista` | Processar Excel para o catálogo |
+| `GET` | `/api/v1/admin/dashboard` | Sim | `admin` | Painel com indicadores de usuários, catálogo, auditoria e Sprint 3 |
+| `GET` | `/api/v1/admin/comparacoes/veiculos` | Sim | `admin` | Comparar dois veículos diretamente do banco |
+| `POST` | `/api/v1/admin/retencao/expurgar` | Sim | `admin` | Executar retenção e descarte seguro |
+| `GET` | `/api/v1/admin/usuarios` | Sim | `admin` | Listar usuários sem expor senhas |
+| `POST` | `/api/v1/admin/usuarios` | Sim | `admin` | Criar usuário e gerar convite de senha |
+| `PATCH` | `/api/v1/admin/usuarios/{id}/role` | Sim | `admin` | Alterar role de usuário |
+| `POST` | `/api/v1/admin/usuarios/{id}/redefinir-senha` | Sim | `admin` | Gerar link temporário de redefinição |
+| `GET` | `/health/db` | Não | Público | Verificar conexão com o banco |
 
 ### Painel administrativo — Sprint 3
 
-O sistema agora possui uma segunda area da aplicacao, exclusiva para usuarios com `role = admin`, acessivel em `http://127.0.0.1:8000/admin`.
+O sistema possui uma área exclusiva para usuários com `role = admin`, acessível em:
 
-O painel consolida em uma unica tela:
-- indicadores reais do banco: usuarios por perfil, veiculos, marcas, modelos, versoes e metricas;
-- observabilidade: quantidade de logs de auditoria e tentativas de autenticacao, separando sucessos e falhas;
-- evidencias organizadas dos quatro blocos do Sprint 3: Pipeline DevSecOps, Seguranca em Codigo e Infraestrutura, Observabilidade/Resposta e Compliance/Seguranca Continua;
-- comparacao administrativa de dois veiculos cadastrados, consultando os registros e ultimas metricas diretamente no banco.
+```text
+http://127.0.0.1:8000/admin
+```
 
-A comparacao fica disponivel em `GET /api/v1/admin/comparacoes/veiculos?veiculo_id_a=1&veiculo_id_b=2` e apresenta potencia, preco, motorizacao, transmissao, tracao, equipamentos e diferencas numericas.
+O painel consolida em uma única tela:
 
-O cadastro publico continua criando somente `user`. No **Painel Admin**, o administrador pode criar contas assistidas e escolher `user`, `analista` ou `admin`. A conta e criada sem receber uma senha em claro: o sistema gera um token aleatorio de uso unico, armazena apenas o hash SHA-256 desse token em `password_reset_tokens` e devolve o link temporario para envio ao usuario.
+- indicadores reais do banco: usuários por perfil, veículos, marcas, modelos, versões e métricas;
+- observabilidade: quantidade de logs de auditoria e tentativas de autenticação, separando sucessos e falhas;
+- evidências organizadas dos quatro blocos da Sprint 3: Pipeline DevSecOps, Segurança em Código e Infraestrutura, Observabilidade/Resposta e Compliance/Segurança Contínua;
+- comparação administrativa de dois veículos cadastrados, consultando os registros e as últimas métricas diretamente no banco.
 
-O administrador tambem pode alterar a role de uma conta e gerar um novo link de redefinicao. Ao abrir o link, o usuario define a propria senha. O token e invalidado apos o uso ou expiracao.
+A comparação fica disponível em:
 
-As senhas da tabela `users` **nao ficam disponiveis em texto puro**: o campo `password` guarda apenas um hash bcrypt derivado da credencial. Mesmo no fluxo administrativo, a senha escolhida pelo usuario nunca e devolvida pela API.
+```text
+GET /api/v1/admin/comparacoes/veiculos?veiculo_id_a=1&veiculo_id_b=2
+```
 
-### Testes da area administrativa
+Ela apresenta potência, preço, motorização, transmissão, tração, equipamentos e diferenças numéricas.
 
-Os testes de API tambem cobrem:
+O cadastro público continua criando somente usuários com `role = user`. No painel administrativo, o administrador pode criar contas assistidas e escolher entre `user`, `analista` e `admin`.
+
+A conta administrativa é criada sem receber uma senha em texto claro. O sistema gera um token aleatório de uso único, armazena apenas o hash SHA-256 desse token em `password_reset_tokens` e devolve o link temporário para envio ao usuário.
+
+O administrador também pode alterar a role de uma conta e gerar um novo link de redefinição de senha. Ao abrir o link, o usuário define a própria senha. O token é invalidado após o uso ou expiração.
+
+As senhas armazenadas na tabela `users` não ficam disponíveis em texto puro. O campo `password` armazena apenas o hash bcrypt derivado da credencial, e a senha escolhida pelo usuário nunca é devolvida pela API.
+
+### Testes da área administrativa
+
+Os testes de API também cobrem:
+
 - acesso do administrador ao dashboard;
-- bloqueio de usuario comum com `403`;
-- comparacao de dois veiculos usando dados persistidos no banco de teste.
+- bloqueio de usuário comum com `403 Forbidden`;
+- comparação de dois veículos utilizando dados persistidos no banco de teste.
 
 Execute com:
 
@@ -130,7 +169,7 @@ py -3 -m pytest -v
 
 ### `POST /api/v1/auth/register`
 
-Cadastra um usuário novo. Mesmo que o payload aceite `role`, o backend sempre cria cadastro público com perfil `user` para evitar elevação de privilégio.
+Cadastra um novo usuário. Mesmo que o payload possua o campo `role`, o backend sempre cria o cadastro público com perfil `user`, evitando elevação de privilégio por meio do endpoint público.
 
 Request body:
 
@@ -144,10 +183,11 @@ Request body:
 ```
 
 Campos:
-- `nome`: opcional, string, ate 120 caracteres.
-- `email`: obrigatório, string, ate 120 caracteres, normalizado antes de salvar.
-- `password`: obrigatório, string, de 8 a 120 caracteres, validado por regra de forca de senha.
-- `role`: opcional no contrato de entrada, mas ignorado para cadastro publico; o valor efetivo salvo e `user`.
+
+- `nome`: opcional, string, até 120 caracteres;
+- `email`: obrigatório, string, até 120 caracteres, normalizado antes de salvar;
+- `password`: obrigatório, string, de 8 a 120 caracteres e validado pela política de senha;
+- `role`: opcional no contrato de entrada, porém ignorado para o cadastro público; o valor efetivo salvo é `user`.
 
 Resposta `201 Created`:
 
@@ -162,16 +202,18 @@ Resposta `201 Created`:
 ```
 
 Erros esperados:
-- `400 Bad Request`: email já cadastrado, role inválida no payload ou senha fora da política.
-- `422 Unprocessable Entity`: payload fora do schema.
+
+- `400 Bad Request`: e-mail já cadastrado ou erro de regra de negócio;
+- `422 Unprocessable Entity`: payload fora do schema, role inválida ou senha fora da política definida pelo schema.
 
 Efeitos colaterais:
-- Cria registro em `users`.
-- Publica evento `SUCESSO_CADASTRO` para auditoria.
+
+- cria registro em `users`;
+- publica evento `SUCESSO_CADASTRO` para auditoria.
 
 ### `POST /api/v1/auth/login`
 
-Autentica o usuário e retorna JWT Bearer.
+Autentica o usuário e retorna um token JWT Bearer.
 
 Request body com `email`:
 
@@ -192,7 +234,8 @@ Request body alternativo com `username`:
 ```
 
 Campos:
-- `email` ou `username`: um dos dois e obrigatório.
+
+- `email` ou `username`: um dos dois é obrigatório;
 - `password`: obrigatório, string, de 8 a 120 caracteres.
 
 Resposta `200 OK`:
@@ -209,21 +252,26 @@ Resposta `200 OK`:
 ```
 
 Erros esperados:
-- `401 Unauthorized`: usuário ou senha incorretos.
+
+- `401 Unauthorized`: usuário ou senha incorretos;
 - `422 Unprocessable Entity`: payload fora do schema.
 
 Efeitos colaterais:
-- Registra tentativa em `logs_auth`.
-- Em sucesso, pública evento `SUCESSO_AUTENTICACAO`.
-- Em falha para usuário existente, publica evento `FALHA_AUTENTICACAO`.
+
+- registra tentativa em `logs_auth`;
+- em sucesso, publica evento `SUCESSO_AUTENTICACAO`;
+- em falha para usuário existente, publica evento `FALHA_AUTENTICACAO`.
 
 Detalhes do token:
-- JWT inclui `sub`, `role`, `cred_fingerprint`, `dados_base64`, `iat` e `exp`.
-- O RBAC valida assinatura, expiracao, integridade do Base64 e fingerprint atual da credencial.
+
+- o JWT inclui `sub`, `role`, `cred_fingerprint`, `dados_base64`, `iat` e `exp`;
+- o RBAC valida assinatura, expiração, integridade do conteúdo e fingerprint atual da credencial.
+
+> `dados_base64` é um campo codificado em Base64 dentro do token. Base64 não deve ser tratado como mecanismo de criptografia ou confidencialidade.
 
 ### `GET /api/v1/veiculos`
 
-Lista veiculos ativos do catalogo. Aceita filtros opcionais `marca`, `modelo`, `versao`, `skip` e `limit`.
+Lista veículos ativos do catálogo. Aceita filtros opcionais `marca`, `modelo`, `versao`, `skip` e `limit`.
 
 Exemplo:
 
@@ -259,11 +307,13 @@ Resposta `200 OK`:
 
 ### `GET /api/v1/veiculos/{id}`
 
-Consulta um veiculo especifico. Retorna `404 Not Found` quando o recurso não existe ou já foi removido logicamente.
+Consulta um veículo específico. Retorna `404 Not Found` quando o recurso não existe ou já foi removido logicamente.
 
 ### `GET /api/v1/veiculos/comparar`
 
-Representa a comparação como consulta HTTP `GET`, evitando verbo de ação no path. Exemplo:
+Representa a comparação como consulta HTTP `GET`.
+
+Exemplo:
 
 ```text
 GET /api/v1/veiculos/comparar?marca=FORD&modelo=Ranger&versao=XLT&atributos_desejados=Airbag&atributos_desejados=Controle%20de%20estabilidade
@@ -273,7 +323,7 @@ Retorna o mesmo contrato de dados da comparação legada em `POST`.
 
 ### `PATCH /api/v1/veiculos/{id}`
 
-Atualiza parcialmente os dados técnicos e/ou a última métrica do veiculo. Somente `admin`.
+Atualiza parcialmente os dados técnicos e/ou a última métrica do veículo. Disponível somente para `admin`.
 
 Exemplo:
 
@@ -284,22 +334,27 @@ Exemplo:
 }
 ```
 
-Resposta `200 OK` com o identificador e a nova identificação do recurso.
+Resposta `200 OK` com o identificador e os dados atualizados do recurso.
 
 Erros:
-- `404 Not Found`: veículo inexistente/inativo.
-- `409 Conflict`: combinação marca/modelo/versão já possui outro veículo ativo.
+
+- `404 Not Found`: veículo inexistente ou inativo;
+- `409 Conflict`: combinação marca/modelo/versão já possui outro veículo ativo;
 - `422 Unprocessable Entity`: payload inválido.
 
 ### `DELETE /api/v1/veiculos/{id}`
 
-Executa remoção lógica, alterando `status` para inativo e preservando histórico e métricas. Somente `admin`.
+Executa remoção lógica, alterando o status do veículo para inativo e preservando histórico e métricas. Disponível somente para `admin`.
 
-Resposta `204 No Content`.
+Resposta:
+
+```text
+204 No Content
+```
 
 ### `POST /api/v1/veiculos/comparar`
 
-Consulta o catálogo por `marca`, `modelo` e `versao`, retornando dados técnicos principais e os atributos livres solicitados.
+Consulta o catálogo por `marca`, `modelo` e `versao`, retornando os dados técnicos principais e os atributos livres solicitados.
 
 Headers:
 
@@ -320,9 +375,10 @@ Request body:
 ```
 
 Campos:
-- `marca`: obrigatório, string, até 255 caracteres.
-- `modelo`: obrigatório, string, até 100 caracteres.
-- `versao`: obrigatório, string, até 100 caracteres.
+
+- `marca`: obrigatório, string, até 255 caracteres;
+- `modelo`: obrigatório, string, até 100 caracteres;
+- `versao`: obrigatório, string, até 100 caracteres;
 - `atributos_desejados`: opcional, lista de strings, até 20 itens.
 
 Resposta `200 OK`:
@@ -341,26 +397,29 @@ Resposta `200 OK`:
   },
   "equipamentos_pesquisados_livres": {
     "Airbag": true,
-    "Controle de estabilidade": "vázio / não disponivel"
+    "Controle de estabilidade": "vazio / não disponível"
   }
 }
 ```
 
 Observações de resposta:
-- Se o veículo não existir, os campos tecnicos retornam `"´vázio / não disponível"`.
-- Os atributos livres são buscados em `metricas_veiculos.pacote_equipamentos` da métrica mais recente.
+
+- se o veículo não existir, os campos técnicos podem retornar informação de indisponibilidade conforme o contrato atual;
+- os atributos livres são buscados em `metricas_veiculos.pacote_equipamentos` da métrica mais recente.
 
 Erros esperados:
-- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente.
-- `403 Forbidden`: perfil fora da lista permitida.
+
+- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente;
+- `403 Forbidden`: perfil fora da lista permitida;
 - `422 Unprocessable Entity`: payload fora do schema.
 
 Efeitos colaterais:
-- Quando o perfil e `analista`, publica evento `EXTRACAO_COMPETITIVA`.
+
+- quando o perfil é `analista`, publica evento `EXTRACAO_COMPETITIVA`.
 
 ### `POST /api/v1/veiculos`
 
-Cadastra um véiculo e cria a métrica inicial.
+Cadastra um veículo e cria sua métrica inicial.
 
 Headers:
 
@@ -390,12 +449,13 @@ Request body:
 ```
 
 Campos:
-- `marca`: obrigatório, string, até 255 caracteres.
-- `modelo`, `versao`, `motorizacao`: obrigatórios, string, até 100 caracteres.
-- `potencia_cv`: obrigatório, inteiro maior ou igual a 1.
-- `transmissao`, `tracao`: obrigatórios, string, até 50 caracteres.
-- `preco_sugerido`: obrigatório, decimal maior ou igual a 0.
-- `pacote_equipamentos`: opcional, objeto JSON.
+
+- `marca`: obrigatório, string, até 255 caracteres;
+- `modelo`, `versao`, `motorizacao`: obrigatórios, string, até 100 caracteres;
+- `potencia_cv`: obrigatório, inteiro maior ou igual a 1;
+- `transmissao`, `tracao`: obrigatórios, string, até 50 caracteres;
+- `preco_sugerido`: obrigatório, decimal maior ou igual a 0;
+- `pacote_equipamentos`: opcional, objeto JSON;
 - `observacao`: opcional, string, até 120 caracteres.
 
 Resposta `201 Created`:
@@ -409,19 +469,22 @@ Resposta `201 Created`:
 ```
 
 Erros esperados:
-- `400 Bad Request`: veiculo ja cadastrado no catálogo.
-- `401 Unauthorized`: token ausente, invalido, expirado ou com fingerprint divergente.
-- `403 Forbidden`: usuario sem perfil `admin`.
+
+- `400 Bad Request`: veículo já cadastrado no catálogo;
+- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente;
+- `403 Forbidden`: usuário sem perfil `admin`;
 - `422 Unprocessable Entity`: payload fora do schema.
 
 Efeitos colaterais:
-- Faz upsert de `marcas`, `modelos` e `versoes`.
-- Cria registro em `veiculos`.
-- Cria registro em `metricas_veiculos`.
-- Publica evento `CADASTRO_VEICULO`.
+
+- realiza upsert de `marcas`, `modelos` e `versoes`;
+- cria registro em `veiculos`;
+- cria registro em `metricas_veiculos`;
+- publica evento `CADASTRO_VEICULO`.
 
 Observação de banco:
-- `metricas_veiculos.preco_sugerido` permite `NULL` para cenários de importação com preço pendente, mas neste endpoint o campo e obrigatório.
+
+- `metricas_veiculos.preco_sugerido` permite `NULL` para cenários de importação com preço pendente, porém neste endpoint o campo é obrigatório.
 
 ### `POST /api/v1/uploads/excel`
 
@@ -435,6 +498,7 @@ Content-Type: multipart/form-data
 ```
 
 Form data:
+
 - `arquivo`: obrigatório, arquivo `.xlsx` ou `.xls`.
 
 Exemplo com `curl`:
@@ -458,19 +522,21 @@ Resposta `201 Created`:
 ```
 
 Erros esperados:
-- `400 Bad Request`: extensão inválida, MIME não permitido, arquivo vazio, tamanho acima do limite ou nome inválido.
-- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente.
-- `403 Forbidden`: perfil fora da lista permitida.
+
+- `400 Bad Request`: extensão inválida, MIME não permitido, arquivo vazio, tamanho acima do limite ou nome inválido;
+- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente;
+- `403 Forbidden`: perfil fora da lista permitida;
 - `422 Unprocessable Entity`: campo `arquivo` ausente.
 
 Efeitos colaterais:
-- Salva o arquivo em `UPLOAD_DIR`.
-- Publica evento `ENVIO_INFORMACOES_EXCEL`.
-- Quando ainda não existe métrica vinculada, `logs.metrica_veiculo_id` fica `NULL`.
+
+- salva o arquivo em `UPLOAD_DIR`;
+- publica evento `ENVIO_INFORMACOES_EXCEL`;
+- quando ainda não existe métrica vinculada, `logs.metrica_veiculo_id` pode ficar `NULL`.
 
 ### `POST /api/v1/uploads/excel/processar`
 
-Recebe um `.xlsx`, interpreta a aba `BASE` e alimenta o catalogo automotivo.
+Recebe um arquivo `.xlsx`, interpreta a aba `BASE` e alimenta o catálogo automotivo.
 
 Headers:
 
@@ -480,22 +546,24 @@ Content-Type: multipart/form-data
 ```
 
 Form data:
-- `arquivo`: obrigatorio, arquivo `.xlsx`.
+
+- `arquivo`: obrigatório, arquivo `.xlsx`.
 
 Regras da planilha:
-- A aba obrigatória deve se chamar `BASE`.
-- A primeira coluna do cabeçalho deve ser `Equipamentos`.
-- Cada coluna de versão representa uma configuração de veículo do mesmo modelo.
-- O modelo e lido da segunda linha.
-- A marca e detectada na planilha; se não for encontrada, usa `FORD`.
-- Cada importação cria nova linha historica em `metricas_veiculos`; snapshots anteriores não são sobrescritos.
+
+- a aba obrigatória deve se chamar `BASE`;
+- a primeira coluna do cabeçalho deve ser `Equipamentos`;
+- cada coluna de versão representa uma configuração de veículo do mesmo modelo;
+- o modelo é lido da segunda linha;
+- a marca é detectada na planilha; se não for encontrada, utiliza `FORD`;
+- cada importação cria uma nova linha histórica em `metricas_veiculos`; snapshots anteriores não são sobrescritos.
 
 Resposta `201 Created`:
 
 ```json
 {
   "status": "sucesso",
-  "mensagem": "Processamento de Excel concluido com sucesso.",
+  "mensagem": "Processamento de Excel concluído com sucesso.",
   "marca": "FORD",
   "modelo": "Ranger",
   "versoes_processadas": 3,
@@ -510,7 +578,7 @@ Resposta `400 Bad Request` para validação da planilha:
 ```json
 {
   "detail": {
-    "mensagem": "Falha de validacao da planilha.",
+    "mensagem": "Falha de validação da planilha.",
     "erros_validacao": [
       "A primeira coluna deve ser 'Equipamentos'."
     ]
@@ -519,16 +587,18 @@ Resposta `400 Bad Request` para validação da planilha:
 ```
 
 Erros esperados:
-- `400 Bad Request`: extensão diferente de `.xlsx`, aba `BASE` ausente, cabeçalho inválido, modelo ausente, versão ausente ou potência inválida.
-- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente.
-- `403 Forbidden`: usuário sem perfil `admin` ou `analista`.
+
+- `400 Bad Request`: extensão diferente de `.xlsx`, aba `BASE` ausente, cabeçalho inválido, modelo ausente, versão ausente ou potência inválida;
+- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente;
+- `403 Forbidden`: usuário sem perfil `admin` ou `analista`;
 - `422 Unprocessable Entity`: campo `arquivo` ausente.
 
 Efeitos colaterais:
-- Faz upsert em `marcas -> modelos -> versoes -> veiculos`.
-- Cria métricas históricas em `metricas_veiculos`.
-- Publica um evento `IMPORTACAO_EXCEL_PROCESSADA` por métrica criada.
-- Publica um evento `ENVIO_INFORMACOES_EXCEL` com arquivo, MIME, tamanho, aba de origem, marca, modelo, versões e totais processados.
+
+- realiza upsert em `marcas -> modelos -> versoes -> veiculos`;
+- cria métricas históricas em `metricas_veiculos`;
+- publica um evento `IMPORTACAO_EXCEL_PROCESSADA` por métrica criada;
+- publica um evento `ENVIO_INFORMACOES_EXCEL` com arquivo, MIME, tamanho, aba de origem, marca, modelo, versões e totais processados.
 
 ### `GET /health/db`
 
@@ -543,7 +613,8 @@ Resposta `200 OK`:
 }
 ```
 
-Erros esperados:
+Erro esperado:
+
 - `500 Internal Server Error`: falha de conexão ou execução no banco.
 
 ### `POST /api/v1/admin/retencao/expurgar`
@@ -571,93 +642,141 @@ Resposta `200 OK`:
 ```
 
 Erros esperados:
-- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente.
+
+- `401 Unauthorized`: token ausente, inválido, expirado ou com fingerprint divergente;
 - `403 Forbidden`: usuário sem perfil `admin`.
 
 ### Rotas web servidas pela aplicação
 
-Essas rotas retornam HTML e não fazem parte do contrato JSON da API:
+Essas rotas retornam HTML e não fazem parte do contrato JSON principal da API:
 
-| Metodo | Rota | Comportamento |
+| Método | Rota | Comportamento |
 |---|---|---|
 | `GET` | `/` | Renderiza a tela de login |
 | `GET` | `/login` | Renderiza a tela de login |
 | `GET` | `/registro` | Renderiza a tela de cadastro |
-| `GET` | `/enviar-arquivo` | Exige cookie de sessão válido e renderiza upload |
-| `GET` | `/upload` | Exige cookie de sessão válido e renderiza upload |
+| `GET` | `/enviar-arquivo` | Exige sessão válida e renderiza a tela de upload |
+| `GET` | `/upload` | Exige sessão válida e renderiza a tela de upload |
+| `GET` | `/redefinir-senha` | Renderiza a tela de redefinição de senha |
+| `GET` | `/admin` | Exige sessão de administrador e renderiza o painel |
+| `GET` | `/painel-admin` | Alias protegido do painel administrativo |
+| `GET` | `/docs` | Renderiza a documentação OpenAPI local |
 
 ## Controles de Cybersecurity implementados
 
-### 1. Seguranca de entrada e validacao de dados
+### 1. Segurança de entrada e validação de dados
 
 - Schemas Pydantic limitam tamanho e tipo de entrada em usuários, login, consulta e cadastro de veículos.
 - Campos `marca`, `modelo`, `versao`, `motorizacao`, `transmissao`, `tracao` e `atributos_desejados` passam por sanitização e validação de padrão textual.
 - Uploads validam extensão, MIME, nome seguro, tamanho máximo, limite de linhas e limite de colunas da planilha.
-- O middleware bloqueia payload flooding por `Content-Length`.
-- Exceções internas são encapsuladas em resposta genérica, sem stack trace para o usuário.
-- Acesso ao banco usa ORM SQLAlchemy nas consultas de negócio, reduzindo risco de SQL injection.
+- O middleware bloqueia payload flooding por meio de `Content-Length`.
+- Exceções internas são encapsuladas em resposta genérica, sem exposição de stack trace para o usuário.
+- O acesso ao banco utiliza SQLAlchemy ORM nas consultas de negócio, reduzindo o risco de SQL Injection.
 
 ### 2. Autenticação e autorização
 
 - Senhas são armazenadas com bcrypt sobre o material `email_normalizado + ":" + senha`.
 - JWT possui assinatura, `iat`, `exp`, `role`, `cred_fingerprint` e `dados_base64`.
 - O RBAC valida token, usuário ativo, fingerprint atual da credencial e perfil permitido por endpoint.
-- Cadastro público sempre cria `role=user`, mesmo que outro papel seja enviado no payload.
+- O cadastro público sempre cria `role=user`, mesmo que outro papel seja enviado no payload.
 
 ### 3. Proteção de APIs e serviços
 
-- CORS e restrito por `CORS_ALLOWED_ORIGINS`.
-- Rate limiting em memoria aplica limite por IP.
-- HTTPS pode ser exigido por `FORCE_HTTPS=true`; certificados TLS são configurados por `SSL_CERTFILE` e `SSL_KEYFILE`.
-- HSTS e enviado quando a requisicao chega por HTTPS ou `X-Forwarded-Proto: https`.
-- Assinatura HMAC de payload JSON pode ser exigida por `REQUIRE_PAYLOAD_SIGNATURE=true`.
-- Para assinar um payload JSON, envie:
-  - `X-Payload-Timestamp`: timestamp Unix em segundos.
-  - `X-Payload-Signature`: `sha256=<hmac_hex>`.
-  - Base cânonica do HMAC: `METHOD + "\n" + PATH + "\n" + QUERY + "\n" + TIMESTAMP + "\n" + SHA256_DO_CORPO`.
-- Rotas públicas de autenticação ficam isentas por padrão em `PAYLOAD_SIGNATURE_EXEMPT_PATHS`, porque o segredo HMAC não deve ser exposto no frontend.
+- CORS é restrito por `CORS_ALLOWED_ORIGINS`.
+- Rate limiting em memória aplica limite por IP.
+- HTTPS pode ser exigido por `FORCE_HTTPS=true`.
+- Certificados TLS são configurados por `SSL_CERTFILE` e `SSL_KEYFILE`.
+- HSTS é enviado quando a requisição chega por HTTPS ou `X-Forwarded-Proto: https`.
+- A assinatura HMAC de payload JSON pode ser exigida por `REQUIRE_PAYLOAD_SIGNATURE=true`.
+- Para assinar um payload JSON, são utilizados:
+  - `X-Payload-Timestamp`: timestamp Unix em segundos;
+  - `X-Payload-Signature`: `sha256=<hmac_hex>`;
+  - base canônica do HMAC: `METHOD + "\n" + PATH + "\n" + QUERY + "\n" + TIMESTAMP + "\n" + SHA256_DO_CORPO`.
+- Rotas públicas de autenticação ficam isentas por padrão em `PAYLOAD_SIGNATURE_EXEMPT_PATHS`, pois o segredo HMAC não deve ser exposto ao frontend.
 
 ### 4. Segurança de dados e privacidade
 
-- Dados pessoais em logs de auditoria e logs de autenticação são pseudonimizados por HMAC quando `ANONYMIZE_AUDIT_PII=true`.
-- Campos sensiveis como senha, token, segredo e authorization são removidos dos payloads de auditoria.
+- Dados pessoais em logs de auditoria e autenticação são pseudonimizados por HMAC quando `ANONYMIZE_AUDIT_PII=true`.
+- Campos sensíveis como senha, token, segredo e authorization são removidos dos payloads de auditoria.
 - Arquivos enviados no upload simples são criptografados antes de serem gravados em `UPLOAD_DIR` quando `ENCRYPT_UPLOADS_AT_REST=true`.
-- A chave de criptografia pode ser definida em `DATA_ENCRYPTION_KEY`; se omitida, a aplicação deriva uma chave a partir de `PAYLOAD_SECRET_HMAC`.
+- A chave de criptografia pode ser definida em `DATA_ENCRYPTION_KEY`; quando não definida explicitamente, a aplicação possui mecanismo configurado para derivação a partir de segredo da aplicação.
 - Políticas configuráveis de retenção controlam logs de auditoria, logs de autenticação e uploads.
-- O endpoint administrativo `/api/v1/admin/retencao/expurgar` executa o descarte seguro configurado.
+- O endpoint administrativo `/api/v1/admin/retencao/expurgar` executa o descarte configurado.
 
 ### 5. Monitoramento, logs e auditoria
 
 - Eventos de cadastro, login, falha de autenticação, upload, processamento de Excel, cadastro de veículo e extração competitiva são auditados.
-- Logs registram usuario, ação, IP pseudonimizado, user-agent pseudonimizado e contexto da operação.
-- Falhas internas são logadas no servidor e não expostas ao cliente.
-- Testes automatizados validam upload, importação, histórico, RBAC, resistência básica a SQL injection, pseudominização, retenção e exigência de assinatura HMAC.
+- Logs registram usuário, ação, IP pseudonimizado, user-agent pseudonimizado e contexto da operação.
+- Falhas internas são registradas no servidor e não expostas diretamente ao cliente.
+- Testes automatizados validam upload, importação, histórico, RBAC, resistência básica a SQL Injection, pseudonimização, retenção e exigência de assinatura HMAC.
+
+## Pipeline DevSecOps
+
+O projeto possui um pipeline DevSecOps centralizado utilizando GitHub Actions.
+
+Workflow oficial:
+
+```text
+.github/workflows/devsecops-pipeline.yml
+```
+
+O pipeline é executado automaticamente em:
+
+- `push` para `main` e `develop`;
+- `pull_request` direcionado para `main` e `develop`;
+- execução manual através de `workflow_dispatch`.
+
+Etapas implementadas:
+
+| Etapa | Ferramenta | Objetivo |
+|---|---|---|
+| Testes automatizados | pytest | Detectar regressões funcionais |
+| SAST | Bandit | Identificar padrões potencialmente inseguros no código Python |
+| SCA | pip-audit | Identificar vulnerabilidades conhecidas nas dependências |
+| Secret Scanning | Gitleaks | Detectar tokens, chaves, senhas e outros secrets no histórico Git |
+| Container Security | Trivy | Analisar vulnerabilidades da imagem Docker |
+| IaC Security | Trivy | Identificar configurações inseguras de infraestrutura |
+| Resultado | GitHub Actions | Consolidar o estado dos jobs de segurança |
+
+Os relatórios gerados pelo pipeline incluem:
+
+- `sast-bandit-report`;
+- `sca-pip-audit-report`;
+- `container-trivy-report`.
+
+Documentação detalhada:
+
+[`docs/DEVSECOPS_PIPELINE.md`](docs/DEVSECOPS_PIPELINE.md)
 
 ## Melhorias futuras
 
-Para evoluir o sistema, a principal melhoria planejada e ampliar a captação de informações para preencher automaticamente tabelas que podem permanecer vazias enquanto determinados fluxos ainda não forem usados.
+Para evoluir o sistema, a principal melhoria planejada é ampliar a captação de informações para preencher automaticamente tabelas que podem permanecer vazias enquanto determinados fluxos ainda não forem utilizados.
 
 Prioridades sugeridas:
-- Criar tela administrativa para cadastro assistido de marcas, modelos, versões e veículos, reduzindo depedência exclusiva do upload Excel para alimentar `marcas`, `modelos`, `versoes`, `veículos` e `metricas_veiculos`.
-- Expandir o processamento de Excel para reconhecer mais abas e layouts, captando preço sugerido, observações, atributos técnicos e pacotes de equipamentos com maior completude.
-- Criar rotina de importação incremental para arquivos já armazenados em `data/uploads`, permitindo reprocessar uploads antigos e preencher catálgo/métrica quando o upload simples ainda não tiver sido processado.
-- Registrar eventos de auditoria mais completos para popular `logs` em ações de consulta, cadastro, importacao, falha de validação e alteração de dados.
-- Manter `logs_auth` alimentada por tentativas de login, logout, falhas de credencial e bloqueios por RBAC, permitindo análise posterior de segurança.
-- Criar um painel de qualidade de dados indicando tabelas vázias, registros incompletos e campos pendentes, como `preco_sugerido` nulo em métricas importadas.
+
+- criar uma interface administrativa para cadastro assistido de marcas, modelos, versões e veículos, reduzindo a dependência exclusiva do upload Excel para alimentar `marcas`, `modelos`, `versoes`, `veiculos` e `metricas_veiculos`;
+- expandir o processamento de Excel para reconhecer mais abas e layouts, captando preço sugerido, observações, atributos técnicos e pacotes de equipamentos com maior completude;
+- criar rotina de importação incremental para arquivos já armazenados em `data/uploads`, permitindo reprocessar uploads antigos e preencher catálogo e métricas quando o upload simples ainda não tiver sido processado;
+- ampliar eventos de auditoria para ações de consulta, cadastro, importação, falha de validação e alteração de dados;
+- ampliar o uso de `logs_auth` para cenários como logout, falhas de credencial e bloqueios por RBAC;
+- criar um painel de qualidade de dados indicando tabelas vazias, registros incompletos e campos pendentes, como `preco_sugerido` nulo em métricas importadas.
 
 Fluxo futuro esperado:
-1. Usuário envia ou cadastra dados pela interface.
+
+1. O usuário envia ou cadastra dados pela interface.
 2. A aplicação valida e normaliza as informações.
-3. O barramento de eventos internos pública a ação realizada.
-4. O catálogo grava dados nas tabelas relacionais.
+3. O barramento de eventos internos publica a ação realizada.
+4. O catálogo grava os dados nas tabelas relacionais.
 5. A auditoria registra a operação em `logs` ou `logs_auth`.
 6. O painel administrativo mostra pendências de preenchimento e permite complementar dados ausentes.
 
 ## Testes automatizados
 
-Os testes agora cobrem duas camadas:
-- `tests/test_processamento_excel_uploads.py`: regras de negócio e segurança dos serviços.
-- `tests/test_api_endpoints.py`: integração HTTP com `TestClient`, incluindo login `200`, senha incorreta `401`, ausência de token `401`, RBAC `403` e CRUD REST de veículos (`201/200/204/404`).
+O projeto possui atualmente 19 testes automatizados distribuídos em três arquivos:
+
+- `tests/test_api_endpoints.py`: testes de integração HTTP, autenticação, autorização, RBAC, dashboard e CRUD de veículos;
+- `tests/test_password_reset_security.py`: testes relacionados à segurança dos tokens de redefinição de senha;
+- `tests/test_processamento_excel_uploads.py`: testes das regras de negócio, processamento de arquivos Excel, upload, histórico e controles de segurança.
 
 Instale as dependências e execute:
 
@@ -666,16 +785,17 @@ py -3 -m pip install -r requirements.txt
 py -3 -m pytest -v
 ```
 
-Os testes da API usam um banco SQLite isolado e não dependem do MySQL de desenvolvimento.
+Os testes utilizam um banco SQLite isolado e não dependem do MySQL de desenvolvimento.
 
 ## Configuração
 
-Use `.env` (ou variáveis de ambiente), com base em `.env.example`.
+Use `.env` ou variáveis de ambiente, com base em `.env.example`.
 
-Principal:
+Principais variáveis:
+
 - `APP_ENV`
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
-- `DATABASE_URL` (opcional; sobrescreve os campos `DB_*`)
+- `DATABASE_URL` — opcional; sobrescreve os campos `DB_*`
 - `SECRET_KEY`
 - `ALGORITHM`
 - `ACCESS_TOKEN_EXPIRE_MINUTES`
@@ -695,9 +815,13 @@ Principal:
 - `ANONYMIZE_AUDIT_PII`
 - `AUDIT_LOG_RETENTION_DAYS`, `AUTH_LOG_RETENTION_DAYS`, `UPLOAD_RETENTION_DAYS`
 
+> Não versione o arquivo `.env` com credenciais reais. Utilize `.env.example` apenas como modelo de configuração.
+
 ### Certificado TLS local
 
-Quando `FORCE_HTTPS=true`, a aplicação passa a recusar acessos por `http://` e exige `https://`. Para isso funcionar corretamente, configure tambem:
+Quando `FORCE_HTTPS=true`, a aplicação passa a exigir HTTPS.
+
+Configure:
 
 ```env
 FORCE_HTTPS=true
@@ -705,7 +829,7 @@ SSL_CERTFILE=certs/local-cert.pem
 SSL_KEYFILE=certs/local-key.pem
 ```
 
-Para gerar um certificado local autoassinado para desenvolvimento/apresentação, execute na raiz do projeto:
+Para gerar um certificado local autoassinado para desenvolvimento ou apresentação, execute na raiz do projeto:
 
 ```powershell
 mkdir certs
@@ -718,29 +842,118 @@ Depois execute a aplicação e acesse:
 https://127.0.0.1:8000
 ```
 
-Observação: por ser autoassinado, o navegador pode mostrar um alerta de certificado não confiavel. Isso e esperado em ambiente local. Em um cenário futuro em que a aplicação seja promovida para um ambiente publicado/produção, o certificado local deve ser substituído por um certificado válido emitido por uma autoridade confiável, como Let's Encrypt, Cloudflare ou o provedor de nuvem.
+Por ser autoassinado, o navegador pode apresentar um alerta de certificado não confiável. Isso é esperado em ambiente local.
 
-## Execução
+Em um ambiente publicado ou de produção, o certificado local deve ser substituído por um certificado válido emitido por uma autoridade confiável ou pelo provedor de infraestrutura.
+
+## Execução local
+
+Instale as dependências:
 
 ```bash
 py -3 -m pip install -r requirements.txt
+```
+
+Inicialize o banco:
+
+```bash
 py -3 -m app.db.init_db
+```
+
+Execute a aplicação:
+
+```bash
 py -3 run.py
 ```
 
-Documentação interativa:
+A aplicação ficará disponível em:
+
+```text
+http://127.0.0.1:8000
+```
+
+Documentação da API:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-Teste de conexao:
+Painel administrativo:
+
+```text
+http://127.0.0.1:8000/admin
+```
+
+Teste de conexão com o banco:
 
 ```bash
 curl http://127.0.0.1:8000/health/db
 ```
 
+## Execução com Docker
 
-### Documentação local
+Crie o arquivo `.env` com base em `.env.example` e configure as variáveis necessárias.
 
-A rota `http://127.0.0.1:8000/docs` usa uma interface OpenAPI local, com CSS e JavaScript servidos pela própria aplicação. Isso evita dependência do CDN externo do Swagger UI e reduz problemas com bloqueios de Content Security Policy (CSP) de antivírus/extensões.
+No PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Em Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+Suba os serviços:
+
+```bash
+docker compose up --build
+```
+
+O `docker-compose.yml` inicia:
+
+- banco MySQL;
+- API FastAPI;
+- volumes persistentes para banco e uploads.
+
+A aplicação ficará disponível em:
+
+```text
+http://127.0.0.1:8000
+```
+
+Para encerrar os containers:
+
+```bash
+docker compose down
+```
+
+Para encerrar e remover também os volumes persistentes:
+
+```bash
+docker compose down -v
+```
+
+> O comando com `-v` remove os volumes e, consequentemente, os dados persistidos localmente. Utilize-o apenas quando quiser recriar o ambiente do zero.
+
+## Documentação local da API
+
+A rota:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+utiliza uma interface OpenAPI local, com CSS e JavaScript servidos pela própria aplicação.
+
+Essa abordagem evita dependência de CDN externo para a página de documentação e reduz problemas de compatibilidade com Content Security Policy (CSP), extensões ou ferramentas de segurança do navegador.
+
+## Documentação de Cybersecurity — Sprint 3
+
+A documentação específica da Sprint 3 está organizada em:
+
+- [`DEVSECOPS_PIPELINE.md`](docs/DEVSECOPS_PIPELINE.md) — Pipeline DevSecOps, SAST, SCA, Secret Scanning, Container Security e IaC Security;
+- [`COMPLIANCE_CHECKLIST.md`](docs/COMPLIANCE_CHECKLIST.md) — STRIDE, OWASP, LGPD e segurança contínua;
+- [`INCIDENT_RESPONSE_PLAYBOOK.md`](docs/INCIDENT_RESPONSE_PLAYBOOK.md) — observabilidade, monitoramento, resposta a incidentes, backup e recuperação.
